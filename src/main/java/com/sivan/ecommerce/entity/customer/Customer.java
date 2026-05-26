@@ -1,6 +1,7 @@
 package com.sivan.ecommerce.entity.customer;
 
 import com.sivan.ecommerce.entity.BaseEntity;
+import com.sivan.ecommerce.entity.cart.Cart;
 import com.sivan.ecommerce.entity.role.Role;
 import jakarta.persistence.*;
 
@@ -45,6 +46,15 @@ public class Customer extends BaseEntity {
             inverseJoinColumns = @JoinColumn(name = "role_id")
     )
     private Set<Role> roles;
+
+    /*
+     *   Specifying FetchType.LAZY for the non-owning side of the @OneToOne association will not affect
+     *   the loading. The related entity will still be loaded as if the FetchType.EAGER is defined.
+     *
+     *   TODO: This can cuz (N + 1) problem, so try to check in the future
+     * */
+    @OneToOne(mappedBy = "customer", cascade = CascadeType.ALL)
+    private Cart cart;
 
     public Customer() {
     }
@@ -120,6 +130,17 @@ public class Customer extends BaseEntity {
 
     public void setRoles(Set<Role> roles) {
         this.roles = roles;
+    }
+
+    public Cart getCart() {
+        return cart;
+    }
+
+    public void setCart(Cart cart) {
+        this.cart = cart;
+
+        if (cart != null)
+            cart.setCustomer(this);
     }
 
     @Override
