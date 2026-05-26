@@ -2,12 +2,11 @@ package com.sivan.ecommerce.entity.customer;
 
 import com.sivan.ecommerce.entity.BaseEntity;
 import com.sivan.ecommerce.entity.cart.Cart;
+import com.sivan.ecommerce.entity.order.Order;
 import com.sivan.ecommerce.entity.role.Role;
 import jakarta.persistence.*;
 
-import java.util.HashSet;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 
 @Entity
 @Table(name = "customer")
@@ -56,6 +55,14 @@ public class Customer extends BaseEntity {
     @OneToOne(mappedBy = "customer", cascade = CascadeType.ALL)
     private Cart cart;
 
+    @OneToMany(fetch = FetchType.LAZY, mappedBy = "customer", cascade = {
+            CascadeType.MERGE,
+            CascadeType.DETACH,
+            CascadeType.PERSIST,
+            CascadeType.REFRESH
+    })
+    private List<Order> orders;
+
     public Customer() {
     }
 
@@ -74,6 +81,15 @@ public class Customer extends BaseEntity {
         roles.add(role);
 
         role.addCustomer(this);
+    }
+
+    public void addOrder(Order order) {
+        if (orders == null)
+            orders = new ArrayList<>();
+
+        orders.add(order);
+
+        order.setCustomer(this);
     }
 
     public String getFirstName() {
@@ -141,6 +157,14 @@ public class Customer extends BaseEntity {
 
         if (cart != null)
             cart.setCustomer(this);
+    }
+
+    public List<Order> getOrders() {
+        return orders;
+    }
+
+    public void setOrders(List<Order> orders) {
+        this.orders = orders;
     }
 
     @Override
