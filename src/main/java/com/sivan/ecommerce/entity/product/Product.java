@@ -1,9 +1,12 @@
 package com.sivan.ecommerce.entity.product;
 
 import com.sivan.ecommerce.entity.BaseEntity;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Table;
+import com.sivan.ecommerce.entity.category.Category;
+import jakarta.persistence.*;
+import org.hibernate.Hibernate;
+
+import java.util.HashSet;
+import java.util.Set;
 
 @Entity
 @Table(name = "product")
@@ -36,6 +39,9 @@ public class Product extends BaseEntity {
     @Column(name = "is_active", nullable = false)
     private boolean isActive = true;
 
+    @ManyToMany(fetch = FetchType.LAZY, mappedBy = "products")
+    private Set<Category> categories;
+
     public Product() {
     }
 
@@ -46,6 +52,13 @@ public class Product extends BaseEntity {
         this.price = price;
         this.currencyCode = currencyCode;
         this.imageUrl = imageUrl;
+    }
+
+    public void addCategory(Category category) {
+        if (categories == null)
+            categories = new HashSet<>();
+
+        categories.add(category);
     }
 
     public String getTitle() {
@@ -104,6 +117,14 @@ public class Product extends BaseEntity {
         isActive = active;
     }
 
+    public Set<Category> getCategories() {
+        return categories;
+    }
+
+    public void setCategories(Set<Category> categories) {
+        this.categories = categories;
+    }
+
     @Override
     public String toString() {
         return "Product{" +
@@ -115,5 +136,30 @@ public class Product extends BaseEntity {
                 ", imageUrl='" + imageUrl + '\'' +
                 ", isActive=" + isActive +
                 '}';
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null) return false;
+
+        /*
+         *   Using Hibernate.getClass() instead of instanceof or standard .getClass() is the absolute
+         *   gold standard for JPA entity equality when you do not have a unique business key.
+         *
+         *   It perfectly strips away the Hibernate Proxy layer to compare the actual underlying types.
+         * */
+
+        if (Hibernate.getClass(this) != Hibernate.getClass(o))
+            return false;
+
+        Product that = (Product) o;
+
+        return this.getId() != null && this.getId().equals(that.getId());
+    }
+
+    @Override
+    public int hashCode() {
+        return Hibernate.getClass(this).hashCode();
     }
 }
