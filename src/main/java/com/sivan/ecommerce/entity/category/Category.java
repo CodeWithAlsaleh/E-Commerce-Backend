@@ -41,7 +41,7 @@ public class Category extends BaseEntity {
             joinColumns = @JoinColumn(name = "category_id"),
             inverseJoinColumns = @JoinColumn(name = "product_id")
     )
-    private Set<Product> products;
+    private Set<Product> products = new HashSet<>();
 
     public Category() {
     }
@@ -53,9 +53,6 @@ public class Category extends BaseEntity {
     }
 
     public void addProduct(Product product) {
-        if (products == null)
-            products = new HashSet<>();
-
         products.add(product);
 
         product.addCategory(this);

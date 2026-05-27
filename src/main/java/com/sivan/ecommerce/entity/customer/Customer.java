@@ -12,10 +12,10 @@ import java.util.*;
 @Table(name = "customer")
 public class Customer extends BaseEntity {
 
-    @Column(name = "first_name", nullable = false)
+    @Column(name = "first_name", length = 100, nullable = false)
     private String firstName;
 
-    @Column(name = "last_name", nullable = false)
+    @Column(name = "last_name", length = 100, nullable = false)
     private String lastName;
 
     @Column(name = "email", unique = true, nullable = false)
@@ -44,13 +44,13 @@ public class Customer extends BaseEntity {
             joinColumns = @JoinColumn(name = "customer_id"),
             inverseJoinColumns = @JoinColumn(name = "role_id")
     )
-    private Set<Role> roles;
+    private Set<Role> roles = new HashSet<>();
 
     /*
      *   Specifying FetchType.LAZY for the non-owning side of the @OneToOne association will not affect
      *   the loading. The related entity will still be loaded as if the FetchType.EAGER is defined.
      *
-     *   TODO: This can cuz (N + 1) problem, so try to check in the future
+     *   TODO: This can cuz (N + 1) problem, so try to check it in the future
      * */
     @OneToOne(mappedBy = "customer", cascade = CascadeType.ALL)
     private Cart cart;
@@ -61,7 +61,7 @@ public class Customer extends BaseEntity {
             CascadeType.PERSIST,
             CascadeType.REFRESH
     })
-    private List<Order> orders;
+    private List<Order> orders = new ArrayList<>(); // TODO: Should I use List or Set here ?
 
     public Customer() {
     }
@@ -75,18 +75,12 @@ public class Customer extends BaseEntity {
     }
 
     public void addRole(Role role) {
-        if (roles == null)
-            roles = new HashSet<>();
-
         roles.add(role);
 
         role.addCustomer(this);
     }
 
     public void addOrder(Order order) {
-        if (orders == null)
-            orders = new ArrayList<>();
-
         orders.add(order);
 
         order.setCustomer(this);

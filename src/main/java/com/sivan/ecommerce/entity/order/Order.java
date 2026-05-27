@@ -5,6 +5,7 @@ import com.sivan.ecommerce.entity.customer.Customer;
 import jakarta.persistence.*;
 
 import java.util.HashSet;
+import java.util.Objects;
 import java.util.Set;
 
 @Entity
@@ -22,7 +23,7 @@ public class Order extends BaseEntity {
     @Column(name = "total_price", nullable = false)
     private long totalPrice;
 
-    @Column(name = "shipping_address", nullable = false)
+    @Column(name = "shipping_address", length = 512, nullable = false)
     private String shippingAddress;
 
     /*
@@ -37,7 +38,7 @@ public class Order extends BaseEntity {
      *   their parent.
      * */
     @OneToMany(fetch = FetchType.LAZY, mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
-    private Set<OrderItem> orderItems;
+    private Set<OrderItem> orderItems = new HashSet<>();
 
     public Order() {
     }
@@ -50,9 +51,6 @@ public class Order extends BaseEntity {
     }
 
     public void addOrderItem(OrderItem orderItem) {
-        if (orderItems == null)
-            orderItems = new HashSet<>();
-
         orderItems.add(orderItem);
 
         orderItem.setOrder(this);
@@ -104,6 +102,17 @@ public class Order extends BaseEntity {
                 "status=" + status +
                 ", totalPrice=" + totalPrice +
                 ", shippingAddress='" + shippingAddress + '\'' +
-                '}';
+                '}' + super.toString();
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (!(o instanceof Order order)) return false;
+        return Objects.equals(this.getId(), order.getId());
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(this.getId());
     }
 }

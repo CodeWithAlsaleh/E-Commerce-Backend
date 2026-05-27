@@ -6,6 +6,7 @@ import jakarta.persistence.*;
 import org.hibernate.Hibernate;
 
 import java.util.HashSet;
+import java.util.Objects;
 import java.util.Set;
 
 @Entity
@@ -40,7 +41,7 @@ public class Product extends BaseEntity {
     private boolean isActive = true;
 
     @ManyToMany(fetch = FetchType.LAZY, mappedBy = "products")
-    private Set<Category> categories;
+    private Set<Category> categories = new HashSet<>();
 
     public Product() {
     }
@@ -55,9 +56,6 @@ public class Product extends BaseEntity {
     }
 
     public void addCategory(Category category) {
-        if (categories == null)
-            categories = new HashSet<>();
-
         categories.add(category);
     }
 
@@ -135,7 +133,7 @@ public class Product extends BaseEntity {
                 ", currencyCode='" + currencyCode + '\'' +
                 ", imageUrl='" + imageUrl + '\'' +
                 ", isActive=" + isActive +
-                '}';
+                '}' + super.toString();
     }
 
     @Override
@@ -160,6 +158,12 @@ public class Product extends BaseEntity {
 
     @Override
     public int hashCode() {
-        return Hibernate.getClass(this).hashCode();
+        /*
+         *   Before (constant hashCode, O(N) lookups instead of O(1)):
+         *   return Hibernate.getClass(this).hashCode();
+         * */
+
+        // After (ID-based, O(1) lookups):
+        return Objects.hashCode(getId());
     }
 }

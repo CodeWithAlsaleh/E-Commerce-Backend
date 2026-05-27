@@ -20,7 +20,7 @@ public class Role extends BaseEntity {
     private boolean isActive = true;
 
     @ManyToMany(fetch = FetchType.LAZY, mappedBy = "roles")
-    private Set<Customer> customers;
+    private Set<Customer> customers = new HashSet<>();
 
     public Role() {
     }
@@ -31,9 +31,6 @@ public class Role extends BaseEntity {
     }
 
     public void addCustomer(Customer customer) {
-        if (customers == null)
-            customers = new HashSet<>();
-
         customers.add(customer);
     }
 

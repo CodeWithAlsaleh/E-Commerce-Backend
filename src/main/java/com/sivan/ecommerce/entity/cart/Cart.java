@@ -5,6 +5,7 @@ import com.sivan.ecommerce.entity.customer.Customer;
 import jakarta.persistence.*;
 
 import java.util.HashSet;
+import java.util.Objects;
 import java.util.Set;
 
 @Entity
@@ -27,7 +28,7 @@ public class Cart extends BaseEntity {
      *   their parent.
      * */
     @OneToMany(fetch = FetchType.LAZY, mappedBy = "cart", cascade = CascadeType.ALL, orphanRemoval = true)
-    private Set<CartItem> cartItems;
+    private Set<CartItem> cartItems = new HashSet<>();
 
     public Cart() {
     }
@@ -37,9 +38,6 @@ public class Cart extends BaseEntity {
     }
 
     public void addCartItem(CartItem cartItem) {
-        if (cartItems == null)
-            cartItems = new HashSet<>();
-
         cartItems.add(cartItem);
 
         cartItem.setCart(this);
@@ -64,5 +62,16 @@ public class Cart extends BaseEntity {
     @Override
     public String toString() {
         return "Cart{}" + super.toString();
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (!(o instanceof Cart cart)) return false;
+        return Objects.equals(customer.getId(), cart.customer.getId());
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(customer.getId());
     }
 }
