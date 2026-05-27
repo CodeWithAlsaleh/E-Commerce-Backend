@@ -4,6 +4,9 @@ import com.sivan.ecommerce.entity.BaseEntity;
 import com.sivan.ecommerce.entity.customer.Customer;
 import jakarta.persistence.*;
 
+import java.util.HashSet;
+import java.util.Set;
+
 @Entity
 @Table(name = "order")
 public class Order extends BaseEntity {
@@ -22,6 +25,20 @@ public class Order extends BaseEntity {
     @Column(name = "shipping_address", nullable = false)
     private String shippingAddress;
 
+    /*
+     *   Note:
+     *
+     *   "orphanRemoval = true" means if you do "order.getOrderItems().remove(item)"
+     *   Hibernate will automatically execute a DELETE SQL statement for that item!
+     *
+     *   "orphanRemoval = true" means that if a child entity is disconnected from its parent
+     *   (removed from a collection or set to null), the framework automatically deletes it
+     *   from the database. It ensures privately owned child objects cannot exist without
+     *   their parent.
+     * */
+    @OneToMany(fetch = FetchType.LAZY, mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
+    private Set<OrderItem> orderItems;
+
     public Order() {
     }
 
@@ -30,6 +47,15 @@ public class Order extends BaseEntity {
         this.status = status;
         this.totalPrice = totalPrice;
         this.shippingAddress = shippingAddress;
+    }
+
+    public void addOrderItem(OrderItem orderItem) {
+        if (orderItems == null)
+            orderItems = new HashSet<>();
+
+        orderItems.add(orderItem);
+
+        orderItem.setOrder(this);
     }
 
     public Customer getCustomer() {
@@ -62,6 +88,14 @@ public class Order extends BaseEntity {
 
     public void setShippingAddress(String shippingAddress) {
         this.shippingAddress = shippingAddress;
+    }
+
+    public Set<OrderItem> getOrderItems() {
+        return orderItems;
+    }
+
+    public void setOrderItems(Set<OrderItem> orderItems) {
+        this.orderItems = orderItems;
     }
 
     @Override
