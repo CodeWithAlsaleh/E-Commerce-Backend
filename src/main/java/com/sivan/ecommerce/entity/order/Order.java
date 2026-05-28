@@ -3,6 +3,7 @@ package com.sivan.ecommerce.entity.order;
 import com.sivan.ecommerce.entity.BaseEntity;
 import com.sivan.ecommerce.entity.customer.Customer;
 import jakarta.persistence.*;
+import org.hibernate.Hibernate;
 
 import java.util.HashSet;
 import java.util.Objects;
@@ -107,12 +108,32 @@ public class Order extends BaseEntity {
 
     @Override
     public boolean equals(Object o) {
-        if (!(o instanceof Order order)) return false;
-        return Objects.equals(this.getId(), order.getId());
+        if (this == o) return true;
+        if (o == null) return false;
+
+        /*
+         *   Using Hibernate.getClass() instead of instanceof or standard .getClass() is the absolute
+         *   gold standard for JPA entity equality when you do not have a unique business key.
+         *
+         *   It perfectly strips away the Hibernate Proxy layer to compare the actual underlying types.
+         * */
+
+        if (Hibernate.getClass(this) != Hibernate.getClass(o))
+            return false;
+
+        Order that = (Order) o;
+
+        return this.getId() != null && this.getId().equals(that.getId());
     }
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(this.getId());
+        /*
+         *   Before (constant hashCode, O(N) lookups instead of O(1)):
+         *   return Hibernate.getClass(this).hashCode();
+         * */
+
+        // After (ID-based, O(1) lookups):
+        return Objects.hashCode(getId());
     }
 }
