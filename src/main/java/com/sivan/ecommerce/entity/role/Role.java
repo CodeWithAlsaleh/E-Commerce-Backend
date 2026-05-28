@@ -25,9 +25,8 @@ public class Role extends BaseEntity {
     public Role() {
     }
 
-    public Role(RoleName roleName, boolean isActive) {
+    public Role(RoleName roleName) {
         this.roleName = roleName;
-        this.isActive = isActive;
     }
 
     public void addCustomer(Customer customer) {

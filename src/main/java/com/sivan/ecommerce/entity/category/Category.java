@@ -46,10 +46,9 @@ public class Category extends BaseEntity {
     public Category() {
     }
 
-    public Category(String title, String description, boolean isActive) {
+    public Category(String title, String description) {
         this.title = title;
         this.description = description;
-        this.isActive = isActive;
     }
 
     public void addProduct(Product product) {
