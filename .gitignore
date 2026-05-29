@@ -33,17 +33,11 @@ build/
 .vscode/
 
 ### Project Plan ###
-plan.txt
+projectSpecificFiles
 
 ### mvnw ###
 mvnw
 mvnw.cmd
-
-### DB ###
-DB.sql
-
-### DB decisions ##
-ECommerce_DB_Rationale.pdf
 
 ### Properties ###
 application.properties
