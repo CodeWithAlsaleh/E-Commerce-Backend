@@ -8,7 +8,7 @@ import jakarta.validation.constraints.Size;
 import org.hibernate.validator.constraints.URL;
 
 public record ProductRequestDTO(@NotBlank @Size(min = 3, max = 255) String title,
-                                @Nullable @Size(min = 3, max = 5000) String description,
+                                @Nullable @Size(min = 40, max = 5000) String description,
                                 @NotNull @Min(0) Integer quantity,
                                 @NotNull @Min(0) Long price,
                                 @NotBlank @Size(min = 3, max = 3) String currencyCode,
