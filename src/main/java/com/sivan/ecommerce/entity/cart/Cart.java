@@ -33,10 +33,6 @@ public class Cart extends BaseEntity {
     public Cart() {
     }
 
-    public Cart(Customer customer) {
-        this.customer = customer;
-    }
-
     public void addCartItem(CartItem cartItem) {
         cartItems.add(cartItem);
 

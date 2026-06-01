@@ -1,5 +1,6 @@
 package com.sivan.ecommerce.config;
 
+import com.sivan.ecommerce.entity.cart.Cart;
 import com.sivan.ecommerce.entity.customer.Customer;
 import com.sivan.ecommerce.entity.role.Role;
 import com.sivan.ecommerce.entity.role.RoleName;
@@ -71,6 +72,7 @@ public class DatabaseSeeder implements CommandLineRunner {
 
         admin.addRole(roleUser);
         admin.addRole(roleAdmin);
+        admin.setCart(new Cart());
 
         customerRepository.save(admin);
     }
