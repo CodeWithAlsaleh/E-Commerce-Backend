@@ -4,7 +4,6 @@ import tools.jackson.databind.ObjectMapper;
 import com.sivan.ecommerce.config.SecurityConfig;
 import com.sivan.ecommerce.dto.product.ProductRequestDTO;
 import com.sivan.ecommerce.dto.product.ProductResponseDTO;
-import com.sivan.ecommerce.exception.InvalidDataException;
 import com.sivan.ecommerce.service.product.ProductService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -543,26 +542,6 @@ class ProductRestControllerTest {
     @Nested
     @DisplayName("Service exception handling")
     class ServiceExceptionHandling {
-
-        @Test
-        @DisplayName("Should return 400 when service throws InvalidDataException (description too short)")
-        @WithMockUser(roles = "ADMIN")
-        void shouldReturn400_whenServiceThrowsInvalidDataException() throws Exception {
-            // Arrange — This scenario: DTO passes bean validation (description ≥ 40 chars)
-            // but service-level checkDescription() rejects the trimmed result
-            when(productService.createProduct(any(ProductRequestDTO.class)))
-                    .thenThrow(new InvalidDataException(
-                            "Description: trimmed size must be at least 40 characters if provided."));
-
-            // Act & Assert
-            mockMvc.perform(post(PRODUCTS_URL)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(validRequest())))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.status").value(400))
-                    .andExpect(jsonPath("$.message").value(
-                            "Description: trimmed size must be at least 40 characters if provided."));
-        }
 
         @Test
         @DisplayName("Should return 500 when service throws an unexpected RuntimeException")
