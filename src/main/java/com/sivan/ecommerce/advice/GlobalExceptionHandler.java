@@ -1,5 +1,6 @@
 package com.sivan.ecommerce.advice;
 
+import com.sivan.ecommerce.exception.CustomerAlreadyExistsException;
 import com.sivan.ecommerce.exception.InvalidDataException;
 import com.sivan.ecommerce.response.ErrorResponse;
 import org.springframework.http.HttpStatus;
@@ -43,6 +44,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(InvalidDataException.class)
     public ResponseEntity<ErrorResponse> handleException(InvalidDataException exception) {
         return buildError(HttpStatus.BAD_REQUEST, exception.getMessage());
+    }
+
+    @ExceptionHandler(CustomerAlreadyExistsException.class)
+    public ResponseEntity<ErrorResponse> handleException(CustomerAlreadyExistsException exception) {
+        return buildError(HttpStatus.CONFLICT, exception.getMessage());
     }
 
     private ResponseEntity<ErrorResponse> buildError(HttpStatus httpStatus, String message) {
