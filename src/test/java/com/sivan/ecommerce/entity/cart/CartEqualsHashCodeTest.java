@@ -23,7 +23,11 @@ class CartEqualsHashCodeTest {
     private Cart createCartWithCustomerId(UUID customerId) {
         Customer customer = new Customer("F", "L", "e@m.com", null, "p");
         EntityTestUtil.setId(customer, customerId);
-        return new Cart(customer);
+
+        Cart cart = new Cart();
+        customer.setCart(cart);
+
+        return cart;
     }
 
     // ==================== equals() ====================

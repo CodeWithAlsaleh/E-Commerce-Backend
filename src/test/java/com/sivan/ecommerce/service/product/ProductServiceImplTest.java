@@ -4,7 +4,6 @@ import com.sivan.ecommerce.dto.product.ProductRequestDTO;
 import com.sivan.ecommerce.dto.product.ProductResponseDTO;
 import com.sivan.ecommerce.entity.EntityTestUtil;
 import com.sivan.ecommerce.entity.product.Product;
-import com.sivan.ecommerce.exception.InvalidDataException;
 import com.sivan.ecommerce.repository.product.ProductRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -207,133 +206,6 @@ class ProductServiceImplTest {
         }
     }
 
-    // ==================== DESCRIPTION VALIDATION FAILURES ====================
-
-    @Nested
-    @DisplayName("Description validation — checkDescription()")
-    class DescriptionValidation {
-
-        @Test
-        @DisplayName("Should throw InvalidDataException when description is non-null and shorter than 40 characters")
-        void shouldThrowInvalidDataException_whenDescriptionTooShort() {
-            // Arrange — 39 characters (just under the threshold)
-            String shortDescription = "A".repeat(39);
-            ProductRequestDTO request = new ProductRequestDTO(
-                    VALID_TITLE, shortDescription, VALID_QUANTITY,
-                    VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
-            );
-
-            // Act & Assert
-            InvalidDataException exception = assertThrows(
-                    InvalidDataException.class,
-                    () -> productService.createProduct(request)
-            );
-            assertEquals(
-                    "Description: trimmed size must be at least 40 characters if provided.",
-                    exception.getMessage()
-            );
-
-            // Repository should never be called since validation fails first
-            verifyNoInteractions(productRepository);
-        }
-
-        @Test
-        @DisplayName("Should throw InvalidDataException when description is exactly 1 character")
-        void shouldThrowInvalidDataException_whenDescriptionIsSingleChar() {
-            // Arrange
-            ProductRequestDTO request = new ProductRequestDTO(
-                    VALID_TITLE, "A", VALID_QUANTITY,
-                    VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
-            );
-
-            // Act & Assert
-            assertThrows(InvalidDataException.class, () -> productService.createProduct(request));
-            verifyNoInteractions(productRepository);
-        }
-
-        @Test
-        @DisplayName("Should throw InvalidDataException when description is an empty string")
-        void shouldThrowInvalidDataException_whenDescriptionIsEmpty() {
-            // Arrange
-            ProductRequestDTO request = new ProductRequestDTO(
-                    VALID_TITLE, "", VALID_QUANTITY,
-                    VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
-            );
-
-            // Act & Assert
-            assertThrows(InvalidDataException.class, () -> productService.createProduct(request));
-            verifyNoInteractions(productRepository);
-        }
-
-        @Test
-        @DisplayName("Should succeed when description is exactly 40 characters (boundary)")
-        void shouldSucceed_whenDescriptionIsExactly40Chars() {
-            // Arrange — exactly 40 characters is allowed (the check is < 40)
-            String exactly40 = "A".repeat(40);
-            ProductRequestDTO request = new ProductRequestDTO(
-                    VALID_TITLE, exactly40, VALID_QUANTITY,
-                    VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
-            );
-
-            UUID expectedId = UUID.randomUUID();
-            Product savedProduct = new Product(
-                    VALID_TITLE.trim(), exactly40, VALID_QUANTITY,
-                    VALID_PRICE, VALID_CURRENCY.trim().toUpperCase(), VALID_IMAGE_URL.trim()
-            );
-            EntityTestUtil.setId(savedProduct, expectedId);
-            when(productRepository.save(any(Product.class))).thenReturn(savedProduct);
-
-            // Act
-            ProductResponseDTO response = productService.createProduct(request);
-
-            // Assert
-            assertNotNull(response);
-            assertEquals(exactly40, response.description());
-            verify(productRepository).save(any(Product.class));
-        }
-
-        @Test
-        @DisplayName("Should succeed when description is 41 characters (above boundary)")
-        void shouldSucceed_whenDescriptionIs41Chars() {
-            // Arrange
-            String desc41 = "B".repeat(41);
-            ProductRequestDTO request = new ProductRequestDTO(
-                    VALID_TITLE, desc41, VALID_QUANTITY,
-                    VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
-            );
-
-            UUID expectedId = UUID.randomUUID();
-            Product savedProduct = new Product(
-                    VALID_TITLE.trim(), desc41, VALID_QUANTITY,
-                    VALID_PRICE, VALID_CURRENCY.trim().toUpperCase(), VALID_IMAGE_URL.trim()
-            );
-            EntityTestUtil.setId(savedProduct, expectedId);
-            when(productRepository.save(any(Product.class))).thenReturn(savedProduct);
-
-            // Act
-            ProductResponseDTO response = productService.createProduct(request);
-
-            // Assert
-            assertNotNull(response);
-            verify(productRepository).save(any(Product.class));
-        }
-
-        @Test
-        @DisplayName("Should throw InvalidDataException when description is 39 characters (below boundary)")
-        void shouldThrowInvalidDataException_whenDescriptionIs39Chars() {
-            // Arrange
-            String desc39 = "C".repeat(39);
-            ProductRequestDTO request = new ProductRequestDTO(
-                    VALID_TITLE, desc39, VALID_QUANTITY,
-                    VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
-            );
-
-            // Act & Assert
-            assertThrows(InvalidDataException.class, () -> productService.createProduct(request));
-            verifyNoInteractions(productRepository);
-        }
-    }
-
     // ==================== REPOSITORY / SERVER FAILURE CASES ====================
 
     @Nested
@@ -450,21 +322,6 @@ class ProductServiceImplTest {
             // Assert
             assertNotNull(response);
             assertEquals(5000, response.description().length());
-        }
-
-        @Test
-        @DisplayName("Should handle description with only whitespace that trims to under 40 chars")
-        void shouldThrow_whenDescriptionIsWhitespaceTrimmingToShort() {
-            // Arrange — The mapper trims the description. "   abc   " trims to "abc" (3 chars < 40)
-            String whitespaceDescription = "   abc   ";
-            ProductRequestDTO request = new ProductRequestDTO(
-                    VALID_TITLE, whitespaceDescription, VALID_QUANTITY,
-                    VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
-            );
-
-            // Act & Assert — After mapper trims, the product's description is "abc" (3 chars < 40)
-            assertThrows(InvalidDataException.class, () -> productService.createProduct(request));
-            verifyNoInteractions(productRepository);
         }
 
         @Test

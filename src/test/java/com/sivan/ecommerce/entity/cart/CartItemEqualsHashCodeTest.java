@@ -18,8 +18,12 @@ import static org.junit.jupiter.api.Assertions.*;
 class CartItemEqualsHashCodeTest {
 
     private Cart createCartWithId(UUID id) {
-        Cart cart = new Cart(new Customer("F", "L", "e@m.com", null, "p"));
+        Customer customer = new Customer("F", "L", "e@m.com", null, "p");
+        Cart cart = new Cart();
+
+        customer.setCart(cart);
         EntityTestUtil.setId(cart, id);
+        
         return cart;
     }
 
