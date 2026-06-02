@@ -26,7 +26,7 @@ public record ProductRequestDTO(@NotBlank @Size(min = 3, max = 255) String title
         // Sanitize only the specific fields that need it!
         title = title != null ? title.trim() : null;
         description = description != null ? description.trim() : null;
-        currencyCode = currencyCode != null ? currencyCode.trim() : null;
+        currencyCode = currencyCode != null ? currencyCode.trim().toUpperCase() : null;
         imageUrl = imageUrl != null ? imageUrl.trim() : null;
     }
 }

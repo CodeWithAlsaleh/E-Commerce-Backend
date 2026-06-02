@@ -12,12 +12,12 @@ public class ProductMapper {
 
     public static Product mapProductRequestToProduct(ProductRequestDTO productRequestDTO) {
         return new Product(
-                productRequestDTO.title().trim(),
-                productRequestDTO.description() != null ? productRequestDTO.description().trim() : null,
+                productRequestDTO.title(),
+                productRequestDTO.description() != null ? productRequestDTO.description() : null,
                 productRequestDTO.quantity(),
                 productRequestDTO.price(),
-                productRequestDTO.currencyCode().trim().toUpperCase(),
-                productRequestDTO.imageUrl().trim()
+                productRequestDTO.currencyCode(),
+                productRequestDTO.imageUrl()
         );
     }
 

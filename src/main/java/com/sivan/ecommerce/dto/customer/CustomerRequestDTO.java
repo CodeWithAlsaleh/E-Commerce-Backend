@@ -5,8 +5,6 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
-// TODO: Check the standard min length for each field (we have already defined the max length in out DB)
-
 public record CustomerRequestDTO(@NotBlank @Size(min = 1, max = 100) String firstName,
                                  @NotBlank @Size(min = 1, max = 100) String lastName,
                                  @NotBlank @Email @Size(max = 255) String email,
