@@ -26,6 +26,7 @@ public class SecurityConfig {
         http.authorizeHttpRequests(config ->
                 config
                         .requestMatchers(HttpMethod.POST, "/products").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/customers").permitAll()
                         .anyRequest().authenticated());
 
         // We need to tell Spring Security that we are using basic authentication
