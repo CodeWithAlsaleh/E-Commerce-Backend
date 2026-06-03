@@ -7,4 +7,6 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 public interface CustomerService extends UserDetailsService {
 
     CustomerResponseDTO createCustomer(CustomerRequestDTO customerRequestDTO);
+
+    CustomerResponseDTO getProfile();
 }

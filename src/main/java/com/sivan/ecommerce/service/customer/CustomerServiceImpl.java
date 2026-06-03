@@ -12,6 +12,7 @@ import com.sivan.ecommerce.repository.customer.CustomerRepository;
 import com.sivan.ecommerce.repository.role.RoleRepository;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -56,6 +57,13 @@ public class CustomerServiceImpl implements CustomerService {
         customer.setPassword(passwordEncoder.encode(customer.getPassword()));
 
         return CustomerMapper.mapCustomerToCustomerResponse(customerRepository.save(customer));
+    }
+
+    @Override
+    public CustomerResponseDTO getProfile() {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+
+        return customerRepository.findByEmail(email.toLowerCase());
     }
 
     @Override

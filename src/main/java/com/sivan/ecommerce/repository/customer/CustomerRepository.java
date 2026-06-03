@@ -1,5 +1,6 @@
 package com.sivan.ecommerce.repository.customer;
 
+import com.sivan.ecommerce.dto.customer.CustomerResponseDTO;
 import com.sivan.ecommerce.entity.customer.Customer;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -34,4 +35,6 @@ public interface CustomerRepository extends JpaRepository<Customer, UUID> {
             c.isActive = true
             """)
     Optional<Customer> findByEmailWithRoles(@Param("email") String email);
+
+    CustomerResponseDTO findByEmail(String email);
 }
