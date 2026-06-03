@@ -1,10 +1,12 @@
 package com.sivan.ecommerce.controller.customer;
 
+import org.springframework.security.test.context.support.WithMockUser;
 import tools.jackson.databind.ObjectMapper;
 import com.sivan.ecommerce.config.SecurityConfig;
 import com.sivan.ecommerce.dto.customer.CustomerRequestDTO;
 import com.sivan.ecommerce.dto.customer.CustomerResponseDTO;
 import com.sivan.ecommerce.exception.CustomerAlreadyExistsException;
+import com.sivan.ecommerce.exception.CustomerNotFoundException;
 import com.sivan.ecommerce.service.customer.CustomerService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -21,6 +23,8 @@ import java.util.UUID;
 import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -52,6 +56,7 @@ class CustomerRestControllerTest {
     // ======================== Constants ========================
 
     private static final String CUSTOMERS_URL = "/customers";
+    private static final String PROFILE_URL = "/customers/me";
 
     private static final String VALID_FIRST_NAME = "John";
     private static final String VALID_LAST_NAME = "Doe";
@@ -762,6 +767,226 @@ class CustomerRestControllerTest {
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(request)))
                         .andExpect(status().isCreated());
+            }
+        }
+    }
+
+    // ==================== getProfile() ====================
+    @Nested
+    @DisplayName("getProfile()")
+    class GetProfile {
+
+        // ======================== Helpers ========================
+
+        private CustomerResponseDTO validProfileResponse(UUID id) {
+            return new CustomerResponseDTO(
+                    id, VALID_FIRST_NAME, VALID_LAST_NAME,
+                    VALID_EMAIL, VALID_LOCATION
+            );
+        }
+
+        // ==================== SUCCESS CASES (200) ====================
+
+        @Nested
+        @DisplayName("Success cases — 200 OK")
+        class SuccessCases {
+
+            @Test
+            @DisplayName("Should return 200 and correct JSON when authenticated USER requests profile")
+            @WithMockUser(roles = "USER")
+            void shouldReturn200_whenAuthenticatedUserRequestsProfile() throws Exception {
+                // Arrange
+                UUID expectedId = UUID.randomUUID();
+                when(customerService.getProfile()).thenReturn(validProfileResponse(expectedId));
+
+                // Act & Assert
+                mockMvc.perform(get(PROFILE_URL))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.id").value(expectedId.toString()))
+                        .andExpect(jsonPath("$.firstName").value(VALID_FIRST_NAME))
+                        .andExpect(jsonPath("$.lastName").value(VALID_LAST_NAME))
+                        .andExpect(jsonPath("$.email").value(VALID_EMAIL))
+                        .andExpect(jsonPath("$.location").value(VALID_LOCATION));
+
+                verify(customerService).getProfile();
+            }
+
+            @Test
+            @DisplayName("Should return 200 when location is null in profile response")
+            @WithMockUser(roles = "USER")
+            void shouldReturn200_whenLocationIsNullInProfile() throws Exception {
+                // Arrange
+                UUID expectedId = UUID.randomUUID();
+                CustomerResponseDTO response = new CustomerResponseDTO(
+                        expectedId, VALID_FIRST_NAME, VALID_LAST_NAME,
+                        VALID_EMAIL, null
+                );
+                when(customerService.getProfile()).thenReturn(response);
+
+                // Act & Assert
+                mockMvc.perform(get(PROFILE_URL))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.id").value(expectedId.toString()))
+                        .andExpect(jsonPath("$.location").value(nullValue()));
+            }
+
+            @Test
+            @DisplayName("Should not return password in the profile response body")
+            @WithMockUser(roles = "USER")
+            void shouldNotReturnPasswordInProfileResponse() throws Exception {
+                // Arrange
+                when(customerService.getProfile()).thenReturn(validProfileResponse(UUID.randomUUID()));
+
+                // Act & Assert
+                mockMvc.perform(get(PROFILE_URL))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.password").doesNotExist());
+            }
+
+            @Test
+            @DisplayName("Should call customerService.getProfile exactly once")
+            @WithMockUser(roles = "USER")
+            void shouldCallServiceExactlyOnce() throws Exception {
+                // Arrange
+                when(customerService.getProfile()).thenReturn(validProfileResponse(UUID.randomUUID()));
+
+                // Act
+                mockMvc.perform(get(PROFILE_URL))
+                        .andExpect(status().isOk());
+
+                // Assert
+                verify(customerService).getProfile();
+                verifyNoMoreInteractions(customerService);
+            }
+        }
+
+        // ==================== AUTHENTICATION FAILURES (401) ====================
+
+        @Nested
+        @DisplayName("Authentication failures — 401 Unauthorized")
+        class AuthenticationFailures {
+
+            @Test
+            @DisplayName("Should return 401 when no credentials are provided")
+            void shouldReturn401_whenNoCredentialsProvided() throws Exception {
+                mockMvc.perform(get(PROFILE_URL))
+                        .andExpect(status().isUnauthorized());
+
+                verifyNoInteractions(customerService);
+            }
+
+            @Test
+            @DisplayName("Should return 401 when invalid credentials are provided")
+            void shouldReturn401_whenInvalidCredentials() throws Exception {
+                mockMvc.perform(get(PROFILE_URL)
+                                .with(httpBasic("wrong@email.com", "WrongPassword1!")))
+                        .andExpect(status().isUnauthorized());
+
+                verifyNoInteractions(customerService);
+            }
+        }
+
+        // ==================== AUTHORIZATION FAILURES (403) ====================
+
+        @Nested
+        @DisplayName("Authorization failures — 403 Forbidden")
+        class AuthorizationFailures {
+
+            @Test
+            @DisplayName("Should return 403 when authenticated user lacks ROLE_USER (e.g., a SYSTEM account)")
+            @WithMockUser(roles = "SYSTEM")
+                // Or roles = {} as you suggested!
+            void shouldReturn403_whenUserLacksRequiredRole() throws Exception {
+                mockMvc.perform(get(PROFILE_URL))
+                        .andExpect(status().isForbidden());
+
+                verifyNoInteractions(customerService);
+            }
+        }
+
+        // ==================== NOT FOUND CASES (404) ====================
+
+        @Nested
+        @DisplayName("Not found cases — 404 Not Found")
+        class NotFoundCases {
+
+            @Test
+            @DisplayName("Should return 404 when authenticated user's profile is not found in database")
+            @WithMockUser(roles = "USER")
+            void shouldReturn404_whenProfileNotFound() throws Exception {
+                // Arrange
+                when(customerService.getProfile())
+                        .thenThrow(new CustomerNotFoundException("Profile not found"));
+
+                // Act & Assert
+                mockMvc.perform(get(PROFILE_URL))
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.status").value(404))
+                        .andExpect(jsonPath("$.message").value("Profile not found"));
+            }
+        }
+
+        // ==================== SERVICE EXCEPTION HANDLING ====================
+
+        @Nested
+        @DisplayName("Service exception handling")
+        class ServiceExceptionHandling {
+
+            @Test
+            @DisplayName("Should return 500 when service throws an unexpected RuntimeException")
+            @WithMockUser(roles = "USER")
+            void shouldReturn500_whenServiceThrowsRuntimeException() throws Exception {
+                // Arrange
+                when(customerService.getProfile())
+                        .thenThrow(new RuntimeException("Database connection lost"));
+
+                // Act & Assert
+                mockMvc.perform(get(PROFILE_URL))
+                        .andExpect(status().isInternalServerError())
+                        .andExpect(jsonPath("$.status").value(500))
+                        .andExpect(jsonPath("$.message").value("An unexpected error occurred."));
+            }
+        }
+
+        // ==================== JSON RESPONSE STRUCTURE ====================
+
+        @Nested
+        @DisplayName("JSON response structure validation")
+        class JsonResponseStructure {
+
+            @Test
+            @DisplayName("Should return all expected fields in the profile response")
+            @WithMockUser(roles = "USER")
+            void shouldReturnAllFieldsInProfileResponse() throws Exception {
+                // Arrange
+                UUID expectedId = UUID.randomUUID();
+                when(customerService.getProfile()).thenReturn(validProfileResponse(expectedId));
+
+                // Act & Assert
+                mockMvc.perform(get(PROFILE_URL))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.id").exists())
+                        .andExpect(jsonPath("$.firstName").exists())
+                        .andExpect(jsonPath("$.lastName").exists())
+                        .andExpect(jsonPath("$.email").exists())
+                        .andExpect(jsonPath("$.location").exists())
+                        .andExpect(jsonPath("$.password").doesNotExist());
+            }
+
+            @Test
+            @DisplayName("Error response should contain status, message, and timeStamp fields")
+            @WithMockUser(roles = "USER")
+            void shouldReturnErrorResponseStructure() throws Exception {
+                // Arrange — trigger a not-found error
+                when(customerService.getProfile())
+                        .thenThrow(new CustomerNotFoundException("Profile not found"));
+
+                // Act & Assert
+                mockMvc.perform(get(PROFILE_URL))
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.status").value(404))
+                        .andExpect(jsonPath("$.message").isNotEmpty())
+                        .andExpect(jsonPath("$.timeStamp").isNumber());
             }
         }
     }
