@@ -36,5 +36,5 @@ public interface CustomerRepository extends JpaRepository<Customer, UUID> {
             """)
     Optional<Customer> findByEmailWithRoles(@Param("email") String email);
 
-    CustomerResponseDTO findByEmail(String email);
+    Optional<CustomerResponseDTO> findByEmail(String email);
 }

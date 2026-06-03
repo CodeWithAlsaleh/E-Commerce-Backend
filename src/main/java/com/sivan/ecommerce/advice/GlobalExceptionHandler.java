@@ -2,6 +2,7 @@ package com.sivan.ecommerce.advice;
 
 import com.sivan.ecommerce.exception.CustomerAlreadyExistsException;
 import com.sivan.ecommerce.exception.InvalidDataException;
+import com.sivan.ecommerce.exception.ResourceNotFoundException;
 import com.sivan.ecommerce.response.ErrorResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -39,6 +40,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ErrorResponse> handleException(HttpMessageNotReadableException exception) {
         return buildError(HttpStatus.BAD_REQUEST, "Invalid input format");
+    }
+
+    // ==================== Custom exceptions ====================
+
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleException(ResourceNotFoundException exception) {
+        return buildError(HttpStatus.NOT_FOUND, exception.getMessage());
     }
 
     @ExceptionHandler(InvalidDataException.class)

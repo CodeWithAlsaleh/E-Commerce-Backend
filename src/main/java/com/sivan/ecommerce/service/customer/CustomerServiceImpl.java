@@ -7,6 +7,7 @@ import com.sivan.ecommerce.entity.customer.Customer;
 import com.sivan.ecommerce.entity.role.Role;
 import com.sivan.ecommerce.entity.role.RoleName;
 import com.sivan.ecommerce.exception.CustomerAlreadyExistsException;
+import com.sivan.ecommerce.exception.CustomerNotFoundException;
 import com.sivan.ecommerce.mapper.customer.CustomerMapper;
 import com.sivan.ecommerce.repository.customer.CustomerRepository;
 import com.sivan.ecommerce.repository.role.RoleRepository;
@@ -63,7 +64,8 @@ public class CustomerServiceImpl implements CustomerService {
     public CustomerResponseDTO getProfile() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
 
-        return customerRepository.findByEmail(email.toLowerCase());
+        return customerRepository.findByEmail(email.toLowerCase())
+                .orElseThrow(() -> new CustomerNotFoundException("Profile not found"));
     }
 
     @Override
