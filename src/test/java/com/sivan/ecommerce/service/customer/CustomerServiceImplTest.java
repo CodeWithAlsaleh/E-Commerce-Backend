@@ -7,8 +7,10 @@ import com.sivan.ecommerce.entity.customer.Customer;
 import com.sivan.ecommerce.entity.role.Role;
 import com.sivan.ecommerce.entity.role.RoleName;
 import com.sivan.ecommerce.exception.CustomerAlreadyExistsException;
+import com.sivan.ecommerce.exception.CustomerNotFoundException;
 import com.sivan.ecommerce.repository.customer.CustomerRepository;
 import com.sivan.ecommerce.repository.role.RoleRepository;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -16,7 +18,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -513,6 +518,246 @@ class CustomerServiceImplTest {
         }
     }
 
+    // ==================== getProfile() ====================
+    @Nested
+    @DisplayName("getProfile()")
+    class GetProfile {
+
+        // ======================== Helper Methods ========================
+
+        /**
+         * Sets up a mocked {@link SecurityContext} so that
+         * {@code SecurityContextHolder.getContext().getAuthentication().getName()}
+         * returns the given email.
+         *
+         * <p><b>IMPORTANT:</b> Every test that calls this helper MUST clear
+         * the context afterward via {@link #clearSecurityContext()} to prevent
+         * test pollution across the suite.</p>
+         */
+        private void stubAuthenticatedUser(String email) {
+            Authentication authentication = mock(Authentication.class);
+            when(authentication.getName()).thenReturn(email);
+
+            SecurityContext securityContext = mock(SecurityContext.class);
+            when(securityContext.getAuthentication()).thenReturn(authentication);
+
+            SecurityContextHolder.setContext(securityContext);
+        }
+
+        /**
+         * Clears the {@link SecurityContextHolder} to avoid leaking state
+         * between tests (static thread-local pollution).
+         */
+        @AfterEach
+        void clearSecurityContext() {
+            SecurityContextHolder.clearContext();
+        }
+
+        // ==================== getProfile() — SUCCESS CASES ====================
+
+        @Nested
+        @DisplayName("getProfile() — Success cases")
+        class GetProfileSuccess {
+
+            @Test
+            @DisplayName("Should return CustomerResponseDTO when authenticated user has a valid profile")
+            void shouldReturnCustomerResponseDTO_whenAuthenticatedUserExists() {
+                // Arrange
+                UUID expectedId = UUID.randomUUID();
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                CustomerResponseDTO expectedResponse = new CustomerResponseDTO(
+                        expectedId, VALID_FIRST_NAME, VALID_LAST_NAME,
+                        VALID_EMAIL, VALID_LOCATION
+                );
+                when(customerRepository.findByEmail(VALID_EMAIL)).thenReturn(Optional.of(expectedResponse));
+
+                // Act
+                CustomerResponseDTO response = customerService.getProfile();
+
+                // Assert
+                assertNotNull(response);
+                assertEquals(expectedId, response.id());
+                assertEquals(VALID_FIRST_NAME, response.firstName());
+                assertEquals(VALID_LAST_NAME, response.lastName());
+                assertEquals(VALID_EMAIL, response.email());
+                assertEquals(VALID_LOCATION, response.location());
+            }
+
+            @Test
+            @DisplayName("Should return CustomerResponseDTO with null location when profile has no location")
+            void shouldReturnDTO_whenLocationIsNull() {
+                // Arrange
+                UUID expectedId = UUID.randomUUID();
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                CustomerResponseDTO expectedResponse = new CustomerResponseDTO(
+                        expectedId, VALID_FIRST_NAME, VALID_LAST_NAME,
+                        VALID_EMAIL, null
+                );
+                when(customerRepository.findByEmail(VALID_EMAIL)).thenReturn(Optional.of(expectedResponse));
+
+                // Act
+                CustomerResponseDTO response = customerService.getProfile();
+
+                // Assert
+                assertNotNull(response);
+                assertEquals(expectedId, response.id());
+                assertNull(response.location());
+            }
+
+            @Test
+            @DisplayName("Should call findByEmail exactly once with the authenticated email")
+            void shouldCallFindByEmailExactlyOnce() {
+                // Arrange
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmail(VALID_EMAIL))
+                        .thenReturn(Optional.of(new CustomerResponseDTO(
+                                UUID.randomUUID(), VALID_FIRST_NAME, VALID_LAST_NAME,
+                                VALID_EMAIL, VALID_LOCATION
+                        )));
+
+                // Act
+                customerService.getProfile();
+
+                // Assert
+                verify(customerRepository).findByEmail(VALID_EMAIL);
+                verifyNoMoreInteractions(customerRepository);
+            }
+
+            @Test
+            @DisplayName("Should not interact with roleRepository or passwordEncoder")
+            void shouldNotInteractWithOtherDependencies() {
+                // Arrange
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmail(VALID_EMAIL))
+                        .thenReturn(Optional.of(new CustomerResponseDTO(
+                                UUID.randomUUID(), VALID_FIRST_NAME, VALID_LAST_NAME,
+                                VALID_EMAIL, VALID_LOCATION
+                        )));
+
+                // Act
+                customerService.getProfile();
+
+                // Assert
+                verifyNoInteractions(roleRepository);
+                verifyNoInteractions(passwordEncoder);
+            }
+        }
+
+        // ==================== getProfile() — EMAIL LOWERCASING ====================
+
+        @Nested
+        @DisplayName("getProfile() — Email lowercasing")
+        class GetProfileEmailLowercasing {
+
+            @Test
+            @DisplayName("Should lowercase the email before querying the repository")
+            void shouldLowercaseEmail_beforeCallingRepository() {
+                // Arrange — SecurityContext returns uppercase email
+                String upperCaseEmail = "JOHN.DOE@EXAMPLE.COM";
+                stubAuthenticatedUser(upperCaseEmail);
+
+                CustomerResponseDTO expectedResponse = new CustomerResponseDTO(
+                        UUID.randomUUID(), VALID_FIRST_NAME, VALID_LAST_NAME,
+                        VALID_EMAIL, VALID_LOCATION
+                );
+                when(customerRepository.findByEmail("john.doe@example.com")).thenReturn(Optional.of(expectedResponse));
+
+                // Act
+                CustomerResponseDTO response = customerService.getProfile();
+
+                // Assert
+                assertNotNull(response);
+                verify(customerRepository).findByEmail("john.doe@example.com");
+            }
+        }
+
+        // ==================== getProfile() — NOT FOUND CASES (CustomerNotFoundException) ====================
+
+        @Nested
+        @DisplayName("getProfile() — Not found cases")
+        class GetProfileNotFound {
+
+            @Test
+            @DisplayName("Should throw CustomerNotFoundException when repository returns empty")
+            void shouldThrowCustomerNotFoundException_whenProfileNotFound() {
+                // Arrange — findByEmail returns Optional.empty() when no matching row is found
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmail(VALID_EMAIL)).thenReturn(Optional.empty());
+
+                // Act & Assert
+                CustomerNotFoundException exception = assertThrows(
+                        CustomerNotFoundException.class,
+                        () -> customerService.getProfile()
+                );
+                assertEquals("Profile not found", exception.getMessage());
+            }
+
+            @Test
+            @DisplayName("Should still call findByEmail before throwing CustomerNotFoundException")
+            void shouldCallRepository_beforeThrowingException() {
+                // Arrange
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmail(VALID_EMAIL)).thenReturn(Optional.empty());
+
+                // Act
+                assertThrows(CustomerNotFoundException.class,
+                        () -> customerService.getProfile());
+
+                // Assert — repository was called, but no further interactions
+                verify(customerRepository).findByEmail(VALID_EMAIL);
+                verifyNoMoreInteractions(customerRepository);
+            }
+        }
+
+        // ==================== getProfile() — SECURITY CONTEXT FAILURES ====================
+
+        @Nested
+        @DisplayName("getProfile() — Security context failures")
+        class GetProfileSecurityContextFailures {
+
+            @Test
+            @DisplayName("Should throw NullPointerException when SecurityContext has no Authentication")
+            void shouldThrowNPE_whenAuthenticationIsNull() {
+                // Arrange — SecurityContext exists but getAuthentication() returns null
+                SecurityContext securityContext = mock(SecurityContext.class);
+                when(securityContext.getAuthentication()).thenReturn(null);
+                SecurityContextHolder.setContext(securityContext);
+
+                // Act & Assert — calling getName() on null Authentication throws NPE
+                assertThrows(NullPointerException.class,
+                        () -> customerService.getProfile());
+
+                // Verify repository is never called
+                verifyNoInteractions(customerRepository);
+            }
+        }
+
+        // ==================== getProfile() — SERVER FAILURE CASES ====================
+
+        @Nested
+        @DisplayName("getProfile() — Server failure simulation")
+        class GetProfileServerFailures {
+
+            @Test
+            @DisplayName("Should propagate RuntimeException when repository throws")
+            void shouldPropagateException_whenRepositoryThrows() {
+                // Arrange
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmail(VALID_EMAIL))
+                        .thenThrow(new RuntimeException("Database connection lost"));
+
+                // Act & Assert
+                RuntimeException exception = assertThrows(
+                        RuntimeException.class,
+                        () -> customerService.getProfile()
+                );
+                assertEquals("Database connection lost", exception.getMessage());
+            }
+        }
+    }
+
     // ==================== loadUserByUsername() ====================
     @Nested
     @DisplayName("loadUserByUsername() ")
@@ -678,7 +923,7 @@ class CustomerServiceImplTest {
                         () -> customerService.loadUserByUsername(VALID_EMAIL));
             }
         }
-        
+
         // ==================== loadUserByUsername() — SERVER FAILURE CASES ====================
 
         @Nested
