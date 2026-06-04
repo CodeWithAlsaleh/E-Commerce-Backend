@@ -7,10 +7,9 @@ import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/products")
@@ -26,5 +25,10 @@ public class ProductRestController {
     @PostMapping
     public ResponseEntity<ProductResponseDTO> createProduct(@RequestBody @Valid ProductRequestDTO productRequestDTO) {
         return ResponseEntity.status(HttpStatus.CREATED).body(productService.createProduct(productRequestDTO));
+    }
+
+    @GetMapping("/{productId}")
+    public ResponseEntity<ProductResponseDTO> getProduct(@PathVariable UUID productId) {
+        return ResponseEntity.ok(productService.getProduct(productId));
     }
 }
