@@ -2,8 +2,10 @@ package com.sivan.ecommerce.controller.product;
 
 import tools.jackson.databind.ObjectMapper;
 import com.sivan.ecommerce.config.SecurityConfig;
+import com.sivan.ecommerce.dto.product.ProductFilterDTO;
 import com.sivan.ecommerce.dto.product.ProductRequestDTO;
 import com.sivan.ecommerce.dto.product.ProductResponseDTO;
+import com.sivan.ecommerce.exception.InvalidDataException;
 import com.sivan.ecommerce.exception.ProductNotFoundException;
 import com.sivan.ecommerce.service.product.ProductService;
 import org.junit.jupiter.api.DisplayName;
@@ -12,13 +14,20 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.List;
 import java.util.UUID;
 
+import static org.hamcrest.Matchers.*;
 import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -1037,6 +1046,560 @@ class ProductRestControllerTest {
                         .andExpect(jsonPath("$.status").value(404))
                         .andExpect(jsonPath("$.message").isNotEmpty())
                         .andExpect(jsonPath("$.timeStamp").isNumber());
+            }
+        }
+    }
+
+    // ==================== getProducts() ====================
+    @Nested
+    @DisplayName("getProducts()")
+    class GetProducts {
+
+        // ======================== Helpers ========================
+
+        /**
+         * Builds a single-item page of {@link ProductResponseDTO} for mock returns.
+         */
+        private Page<ProductResponseDTO> singleProductPage() {
+            ProductResponseDTO product = new ProductResponseDTO(
+                    UUID.randomUUID(), VALID_TITLE, VALID_DESCRIPTION,
+                    VALID_QUANTITY, VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
+            );
+            return new PageImpl<>(List.of(product), PageRequest.of(0, 10), 1);
+        }
+
+        /**
+         * Builds an empty page for mock returns.
+         */
+        private Page<ProductResponseDTO> emptyPage() {
+            return new PageImpl<>(List.of(), PageRequest.of(0, 10), 0);
+        }
+
+        // ==================== SUCCESS CASES (200) ====================
+
+        @Nested
+        @DisplayName("Success cases — 200 OK")
+        class SuccessCases {
+
+            @Test
+            @DisplayName("Should return 200 and a page of products with no filters applied")
+            void shouldReturn200_whenNoFiltersApplied() throws Exception {
+                // Arrange
+                when(productService.getProducts(any(ProductFilterDTO.class), any(Pageable.class)))
+                        .thenReturn(singleProductPage());
+
+                // Act & Assert
+                mockMvc.perform(get(PRODUCTS_URL))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.content").isArray())
+                        .andExpect(jsonPath("$.content", hasSize(1)))
+                        .andExpect(jsonPath("$.content[0].title").value(VALID_TITLE))
+                        .andExpect(jsonPath("$.content[0].description").value(VALID_DESCRIPTION))
+                        .andExpect(jsonPath("$.content[0].quantity").value(VALID_QUANTITY))
+                        .andExpect(jsonPath("$.content[0].price").value(VALID_PRICE))
+                        .andExpect(jsonPath("$.content[0].currencyCode").value(VALID_CURRENCY))
+                        .andExpect(jsonPath("$.content[0].imageUrl").value(VALID_IMAGE_URL));
+
+                verify(productService).getProducts(any(ProductFilterDTO.class), any(Pageable.class));
+            }
+
+            @Test
+            @DisplayName("Should return 200 with all filter query parameters applied")
+            void shouldReturn200_whenAllFiltersApplied() throws Exception {
+                // Arrange
+                when(productService.getProducts(any(ProductFilterDTO.class), any(Pageable.class)))
+                        .thenReturn(singleProductPage());
+
+                // Act & Assert
+                mockMvc.perform(get(PRODUCTS_URL)
+                                .param("title", "Headphones")
+                                .param("minPrice", "1000")
+                                .param("maxPrice", "5000")
+                                .param("category", "Electronics"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.content").isArray())
+                        .andExpect(jsonPath("$.content", hasSize(1)));
+
+                verify(productService).getProducts(any(ProductFilterDTO.class), any(Pageable.class));
+            }
+
+            @Test
+            @DisplayName("Should return 200 with only title filter applied")
+            void shouldReturn200_whenOnlyTitleFilterApplied() throws Exception {
+                // Arrange
+                when(productService.getProducts(any(ProductFilterDTO.class), any(Pageable.class)))
+                        .thenReturn(singleProductPage());
+
+                // Act & Assert
+                mockMvc.perform(get(PRODUCTS_URL)
+                                .param("title", "Wireless"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.content").isArray())
+                        .andExpect(jsonPath("$.content", hasSize(1)));
+            }
+
+            @Test
+            @DisplayName("Should return 200 with only price range filters applied")
+            void shouldReturn200_whenOnlyPriceRangeApplied() throws Exception {
+                // Arrange
+                when(productService.getProducts(any(ProductFilterDTO.class), any(Pageable.class)))
+                        .thenReturn(singleProductPage());
+
+                // Act & Assert
+                mockMvc.perform(get(PRODUCTS_URL)
+                                .param("minPrice", "100")
+                                .param("maxPrice", "9999"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.content").isArray())
+                        .andExpect(jsonPath("$.content", hasSize(1)));
+            }
+
+            @Test
+            @DisplayName("Should return 200 with empty content when no products match filters")
+            void shouldReturn200_withEmptyContent_whenNoProductsMatch() throws Exception {
+                // Arrange
+                when(productService.getProducts(any(ProductFilterDTO.class), any(Pageable.class)))
+                        .thenReturn(emptyPage());
+
+                // Act & Assert
+                mockMvc.perform(get(PRODUCTS_URL)
+                                .param("title", "NonExistentProduct"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.content").isArray())
+                        .andExpect(jsonPath("$.content", hasSize(0)))
+                        .andExpect(jsonPath("$.totalElements").value(0));
+            }
+
+            @Test
+            @DisplayName("Should return 200 with pagination metadata in response")
+            void shouldReturn200_withPaginationMetadata() throws Exception {
+                // Arrange
+                when(productService.getProducts(any(ProductFilterDTO.class), any(Pageable.class)))
+                        .thenReturn(singleProductPage());
+
+                // Act & Assert
+                mockMvc.perform(get(PRODUCTS_URL)
+                                .param("page", "0")
+                                .param("size", "10"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.content").isArray())
+                        .andExpect(jsonPath("$.totalElements").isNumber())
+                        .andExpect(jsonPath("$.totalPages").isNumber())
+                        .andExpect(jsonPath("$.size").value(10))
+                        .andExpect(jsonPath("$.number").value(0));
+            }
+
+            @Test
+            @DisplayName("Should return 200 with valid sort parameter (price ascending)")
+            void shouldReturn200_whenSortByPriceAsc() throws Exception {
+                // Arrange
+                when(productService.getProducts(any(ProductFilterDTO.class), any(Pageable.class)))
+                        .thenReturn(singleProductPage());
+
+                // Act & Assert
+                mockMvc.perform(get(PRODUCTS_URL)
+                                .param("sort", "price,asc"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.content").isArray());
+            }
+
+            @Test
+            @DisplayName("Should return 200 with valid sort parameter (title descending)")
+            void shouldReturn200_whenSortByTitleDesc() throws Exception {
+                // Arrange
+                when(productService.getProducts(any(ProductFilterDTO.class), any(Pageable.class)))
+                        .thenReturn(singleProductPage());
+
+                // Act & Assert
+                mockMvc.perform(get(PRODUCTS_URL)
+                                .param("sort", "title,desc"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.content").isArray());
+            }
+
+            @Test
+            @DisplayName("Should return 200 without authentication (permitAll endpoint)")
+            void shouldReturn200_withoutAuthentication() throws Exception {
+                // Arrange — no @WithMockUser, proving permitAll() works
+                when(productService.getProducts(any(ProductFilterDTO.class), any(Pageable.class)))
+                        .thenReturn(singleProductPage());
+
+                // Act & Assert
+                mockMvc.perform(get(PRODUCTS_URL))
+                        .andExpect(status().isOk());
+            }
+
+            @Test
+            @DisplayName("Should call productService.getProducts exactly once")
+            void shouldCallServiceExactlyOnce() throws Exception {
+                // Arrange
+                when(productService.getProducts(any(ProductFilterDTO.class), any(Pageable.class)))
+                        .thenReturn(singleProductPage());
+
+                // Act
+                mockMvc.perform(get(PRODUCTS_URL))
+                        .andExpect(status().isOk());
+
+                // Assert
+                verify(productService).getProducts(any(ProductFilterDTO.class), any(Pageable.class));
+                verifyNoMoreInteractions(productService);
+            }
+        }
+
+        // ==================== VALIDATION FAILURES (400) ====================
+
+        @Nested
+        @DisplayName("Validation failures — 400 Bad Request")
+        class ValidationFailures {
+
+            // ---------- title ----------
+
+            @Test
+            @DisplayName("Should return 400 when title is shorter than 3 characters")
+            void shouldReturn400_whenTitleTooShort() throws Exception {
+                mockMvc.perform(get(PRODUCTS_URL)
+                                .param("title", "AB"))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.status").value(400))
+                        .andExpect(jsonPath("$.message").isNotEmpty());
+
+                verifyNoInteractions(productService);
+            }
+
+            @Test
+            @DisplayName("Should return 400 when title is blank")
+            void shouldReturn400_whenTitleIsBlank() throws Exception {
+                mockMvc.perform(get(PRODUCTS_URL)
+                                .param("title", "                   "))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.status").value(400))
+                        .andExpect(jsonPath("$.message").isNotEmpty());
+
+                verifyNoInteractions(productService);
+            }
+
+            @Test
+            @DisplayName("Should return 400 when title exceeds 255 characters")
+            void shouldReturn400_whenTitleTooLong() throws Exception {
+                mockMvc.perform(get(PRODUCTS_URL)
+                                .param("title", "A".repeat(256)))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.message").isNotEmpty());
+
+                verifyNoInteractions(productService);
+            }
+
+            // ---------- minPrice ----------
+
+            @Test
+            @DisplayName("Should return 400 when minPrice is negative")
+            void shouldReturn400_whenMinPriceIsNegative() throws Exception {
+                mockMvc.perform(get(PRODUCTS_URL)
+                                .param("minPrice", "-1"))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.message").isNotEmpty());
+
+                verifyNoInteractions(productService);
+            }
+
+            // ---------- maxPrice ----------
+
+            @Test
+            @DisplayName("Should return 400 when maxPrice is negative")
+            void shouldReturn400_whenMaxPriceIsNegative() throws Exception {
+                mockMvc.perform(get(PRODUCTS_URL)
+                                .param("maxPrice", "-1"))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.message").isNotEmpty());
+
+                verifyNoInteractions(productService);
+            }
+
+            // ---------- category ----------
+
+            @Test
+            @DisplayName("Should return 400 when category is blank")
+            void shouldReturn400_whenCategoryIsBlank() throws Exception {
+                mockMvc.perform(get(PRODUCTS_URL)
+                                .param("category", "      "))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.message").isNotEmpty());
+
+                verifyNoInteractions(productService);
+            }
+
+            @Test
+            @DisplayName("Should return 400 when category exceeds 255 characters")
+            void shouldReturn400_whenCategoryTooLong() throws Exception {
+                mockMvc.perform(get(PRODUCTS_URL)
+                                .param("category", "C".repeat(256)))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.message").isNotEmpty());
+
+                verifyNoInteractions(productService);
+            }
+
+            // ---------- type mismatch ----------
+
+            @Test
+            @DisplayName("Should return 400 when minPrice is not a number")
+            void shouldReturn400_whenMinPriceIsNotANumber() throws Exception {
+                mockMvc.perform(get(PRODUCTS_URL)
+                                .param("minPrice", "abc"))
+                        .andExpect(status().isBadRequest());
+
+                verifyNoInteractions(productService);
+            }
+
+            @Test
+            @DisplayName("Should return 400 when maxPrice is not a number")
+            void shouldReturn400_whenMaxPriceIsNotANumber() throws Exception {
+                mockMvc.perform(get(PRODUCTS_URL)
+                                .param("maxPrice", "xyz"))
+                        .andExpect(status().isBadRequest());
+
+                verifyNoInteractions(productService);
+            }
+        }
+
+        // ==================== BUSINESS RULE FAILURES (400 via InvalidDataException) ====================
+
+        @Nested
+        @DisplayName("Business rule failures — 400 Bad Request (via service)")
+        class BusinessRuleFailures {
+
+            @Test
+            @DisplayName("Should return 400 when minPrice is greater than maxPrice")
+            void shouldReturn400_whenMinPriceGreaterThanMaxPrice() throws Exception {
+                // Arrange — the service enforces this rule
+                when(productService.getProducts(any(ProductFilterDTO.class), any(Pageable.class)))
+                        .thenThrow(new InvalidDataException("Minimum price must be less than or equal to maximum price"));
+
+                // Act & Assert
+                mockMvc.perform(get(PRODUCTS_URL)
+                                .param("minPrice", "5000")
+                                .param("maxPrice", "1000"))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.status").value(400))
+                        .andExpect(jsonPath("$.message").value("Minimum price must be less than or equal to maximum price"));
+            }
+
+            @Test
+            @DisplayName("Should return 400 when sorting by a disallowed field")
+            void shouldReturn400_whenSortByDisallowedField() throws Exception {
+                // Arrange — the service enforces allowed sort fields ("title", "price")
+                when(productService.getProducts(any(ProductFilterDTO.class), any(Pageable.class)))
+                        .thenThrow(new InvalidDataException("Sorting by 'description' is not allowed"));
+
+                // Act & Assert
+                mockMvc.perform(get(PRODUCTS_URL)
+                                .param("sort", "description,asc"))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.status").value(400))
+                        .andExpect(jsonPath("$.message").value("Sorting by 'description' is not allowed"));
+            }
+
+            @Test
+            @DisplayName("Should return 400 when sorting by 'quantity' (disallowed)")
+            void shouldReturn400_whenSortByQuantity() throws Exception {
+                // Arrange
+                when(productService.getProducts(any(ProductFilterDTO.class), any(Pageable.class)))
+                        .thenThrow(new InvalidDataException("Sorting by 'quantity' is not allowed"));
+
+                // Act & Assert
+                mockMvc.perform(get(PRODUCTS_URL)
+                                .param("sort", "quantity,asc"))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.status").value(400))
+                        .andExpect(jsonPath("$.message").value("Sorting by 'quantity' is not allowed"));
+            }
+        }
+
+        // ==================== SERVICE EXCEPTION HANDLING ====================
+
+        @Nested
+        @DisplayName("Service exception handling")
+        class ServiceExceptionHandling {
+
+            @Test
+            @DisplayName("Should return 500 when service throws an unexpected RuntimeException")
+            void shouldReturn500_whenServiceThrowsRuntimeException() throws Exception {
+                // Arrange
+                when(productService.getProducts(any(ProductFilterDTO.class), any(Pageable.class)))
+                        .thenThrow(new RuntimeException("Database connection lost"));
+
+                // Act & Assert
+                mockMvc.perform(get(PRODUCTS_URL))
+                        .andExpect(status().isInternalServerError())
+                        .andExpect(jsonPath("$.status").value(500))
+                        .andExpect(jsonPath("$.message").value("An unexpected error occurred."));
+            }
+        }
+
+        // ==================== JSON RESPONSE STRUCTURE ====================
+
+        @Nested
+        @DisplayName("JSON response structure validation")
+        class JsonResponseStructure {
+
+            @Test
+            @DisplayName("Should return paginated response with all Spring Data Page fields")
+            void shouldReturnPaginatedResponseStructure() throws Exception {
+                // Arrange
+                when(productService.getProducts(any(ProductFilterDTO.class), any(Pageable.class)))
+                        .thenReturn(singleProductPage());
+
+                // Act & Assert
+                mockMvc.perform(get(PRODUCTS_URL))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.content").isArray())
+                        .andExpect(jsonPath("$.content[0].id").exists())
+                        .andExpect(jsonPath("$.content[0].title").exists())
+                        .andExpect(jsonPath("$.content[0].description").exists())
+                        .andExpect(jsonPath("$.content[0].quantity").exists())
+                        .andExpect(jsonPath("$.content[0].price").exists())
+                        .andExpect(jsonPath("$.content[0].currencyCode").exists())
+                        .andExpect(jsonPath("$.content[0].imageUrl").exists())
+                        .andExpect(jsonPath("$.totalElements").exists())
+                        .andExpect(jsonPath("$.totalPages").exists())
+                        .andExpect(jsonPath("$.size").exists())
+                        .andExpect(jsonPath("$.number").exists());
+            }
+
+            @Test
+            @DisplayName("Error response should contain status, message, and timeStamp fields")
+            void shouldReturnErrorResponseStructure() throws Exception {
+                // Arrange — trigger a business rule error
+                when(productService.getProducts(any(ProductFilterDTO.class), any(Pageable.class)))
+                        .thenThrow(new InvalidDataException("Minimum price must be less than or equal to maximum price"));
+
+                // Act & Assert
+                mockMvc.perform(get(PRODUCTS_URL)
+                                .param("minPrice", "5000")
+                                .param("maxPrice", "1000"))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.status").value(400))
+                        .andExpect(jsonPath("$.message").isNotEmpty())
+                        .andExpect(jsonPath("$.timeStamp").isNumber());
+            }
+        }
+
+        // ==================== EDGE CASES ====================
+
+        @Nested
+        @DisplayName("Edge cases")
+        class EdgeCases {
+
+            @Test
+            @DisplayName("Should return 200 when title is exactly 3 characters (boundary minimum)")
+            void shouldReturn200_whenTitleIsExactlyMinLength() throws Exception {
+                // Arrange
+                when(productService.getProducts(any(ProductFilterDTO.class), any(Pageable.class)))
+                        .thenReturn(singleProductPage());
+
+                // Act & Assert
+                mockMvc.perform(get(PRODUCTS_URL)
+                                .param("title", "Abc"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.content").isArray());
+            }
+
+            @Test
+            @DisplayName("Should return 200 when title is exactly 255 characters (boundary maximum)")
+            void shouldReturn200_whenTitleIsExactlyMaxLength() throws Exception {
+                // Arrange
+                when(productService.getProducts(any(ProductFilterDTO.class), any(Pageable.class)))
+                        .thenReturn(singleProductPage());
+
+                // Act & Assert
+                mockMvc.perform(get(PRODUCTS_URL)
+                                .param("title", "T".repeat(255)))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.content").isArray());
+            }
+
+            @Test
+            @DisplayName("Should return 200 when category is exactly 255 characters (boundary maximum)")
+            void shouldReturn200_whenCategoryIsExactlyMaxLength() throws Exception {
+                // Arrange
+                when(productService.getProducts(any(ProductFilterDTO.class), any(Pageable.class)))
+                        .thenReturn(singleProductPage());
+
+                // Act & Assert
+                mockMvc.perform(get(PRODUCTS_URL)
+                                .param("category", "C".repeat(255)))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.content").isArray());
+            }
+
+            @Test
+            @DisplayName("Should return 200 when minPrice is zero (boundary minimum)")
+            void shouldReturn200_whenMinPriceIsZero() throws Exception {
+                // Arrange
+                when(productService.getProducts(any(ProductFilterDTO.class), any(Pageable.class)))
+                        .thenReturn(singleProductPage());
+
+                // Act & Assert
+                mockMvc.perform(get(PRODUCTS_URL)
+                                .param("minPrice", "0"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.content").isArray());
+            }
+
+            @Test
+            @DisplayName("Should return 200 when maxPrice is zero (boundary minimum)")
+            void shouldReturn200_whenMaxPriceIsZero() throws Exception {
+                // Arrange
+                when(productService.getProducts(any(ProductFilterDTO.class), any(Pageable.class)))
+                        .thenReturn(singleProductPage());
+
+                // Act & Assert
+                mockMvc.perform(get(PRODUCTS_URL)
+                                .param("maxPrice", "0"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.content").isArray());
+            }
+
+            @Test
+            @DisplayName("Should return 200 when minPrice equals maxPrice")
+            void shouldReturn200_whenMinPriceEqualsMaxPrice() throws Exception {
+                // Arrange
+                when(productService.getProducts(any(ProductFilterDTO.class), any(Pageable.class)))
+                        .thenReturn(singleProductPage());
+
+                // Act & Assert
+                mockMvc.perform(get(PRODUCTS_URL)
+                                .param("minPrice", "5000")
+                                .param("maxPrice", "5000"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.content").isArray());
+            }
+
+            @Test
+            @DisplayName("Should return 200 with multiple products in the page")
+            void shouldReturn200_withMultipleProducts() throws Exception {
+                // Arrange
+                ProductResponseDTO product1 = new ProductResponseDTO(
+                        UUID.randomUUID(), "Product One", VALID_DESCRIPTION,
+                        VALID_QUANTITY, 2999L, VALID_CURRENCY, VALID_IMAGE_URL
+                );
+                ProductResponseDTO product2 = new ProductResponseDTO(
+                        UUID.randomUUID(), "Product Two", VALID_DESCRIPTION,
+                        VALID_QUANTITY, 4999L, VALID_CURRENCY, VALID_IMAGE_URL
+                );
+                Page<ProductResponseDTO> multiPage = new PageImpl<>(
+                        List.of(product1, product2), PageRequest.of(0, 10), 2
+                );
+                when(productService.getProducts(any(ProductFilterDTO.class), any(Pageable.class)))
+                        .thenReturn(multiPage);
+
+                // Act & Assert
+                mockMvc.perform(get(PRODUCTS_URL))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.content", hasSize(2)))
+                        .andExpect(jsonPath("$.content[0].title").value("Product One"))
+                        .andExpect(jsonPath("$.content[1].title").value("Product Two"))
+                        .andExpect(jsonPath("$.totalElements").value(2));
             }
         }
     }
