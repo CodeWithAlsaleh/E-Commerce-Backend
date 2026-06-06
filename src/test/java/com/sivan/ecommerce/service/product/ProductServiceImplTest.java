@@ -1,9 +1,11 @@
 package com.sivan.ecommerce.service.product;
 
+import com.sivan.ecommerce.dto.product.ProductFilterDTO;
 import com.sivan.ecommerce.dto.product.ProductRequestDTO;
 import com.sivan.ecommerce.dto.product.ProductResponseDTO;
 import com.sivan.ecommerce.entity.EntityTestUtil;
 import com.sivan.ecommerce.entity.product.Product;
+import com.sivan.ecommerce.exception.InvalidDataException;
 import com.sivan.ecommerce.exception.ProductNotFoundException;
 import com.sivan.ecommerce.repository.product.ProductRepository;
 import org.junit.jupiter.api.DisplayName;
@@ -14,11 +16,19 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.*;
 
 /**
@@ -700,6 +710,531 @@ class ProductServiceImplTest {
                 // Assert
                 assertNotNull(response);
                 assertEquals(5000, response.description().length());
+            }
+        }
+    }
+
+    // ======================== getProducts() ========================
+
+    @Nested
+    @DisplayName("getProducts()")
+    class GetProducts {
+
+        // ======================== Helper Methods ========================
+
+        /**
+         * Builds a {@link ProductFilterDTO} with all filters populated.
+         */
+        private ProductFilterDTO validFilter() {
+            return new ProductFilterDTO(
+                    "Headphones",
+                    1000L,
+                    5000L,
+                    "Electronics"
+            );
+        }
+
+        /**
+         * Builds a {@link ProductFilterDTO} with all fields null (no filtering).
+         */
+        private ProductFilterDTO emptyFilter() {
+            return new ProductFilterDTO(null, null, null, null);
+        }
+
+        /**
+         * Builds a default valid {@link Pageable} sorted by "price" ascending.
+         */
+        private Pageable validPageable() {
+            return PageRequest.of(0, 10, Sort.by(Sort.Direction.ASC, "price"));
+        }
+
+        /**
+         * Creates a page containing a single {@link ProductResponseDTO}.
+         */
+        private Page<ProductResponseDTO> singleProductPage(Pageable pageable) {
+            ProductResponseDTO product = new ProductResponseDTO(
+                    UUID.randomUUID(),
+                    VALID_TITLE,
+                    VALID_DESCRIPTION,
+                    VALID_QUANTITY,
+                    VALID_PRICE,
+                    VALID_CURRENCY,
+                    VALID_IMAGE_URL
+            );
+            return new PageImpl<>(List.of(product), pageable, 1);
+        }
+
+        // ==================== SUCCESS CASES ====================
+
+        @Nested
+        @DisplayName("Success cases")
+        class SuccessCases {
+
+            @Test
+            @DisplayName("Should return a page of products when filters and pageable are valid")
+            void shouldReturnPageOfProducts_whenFiltersAreValid() {
+                // Arrange
+                ProductFilterDTO filter = validFilter();
+                Pageable pageable = validPageable();
+                Page<ProductResponseDTO> expectedPage = singleProductPage(pageable);
+
+                when(productRepository.findByFilters(
+                        filter.title(), filter.minPrice(), filter.maxPrice(),
+                        filter.category(), pageable))
+                        .thenReturn(expectedPage);
+
+                // Act
+                Page<ProductResponseDTO> result = productService.getProducts(filter, pageable);
+
+                // Assert
+                assertNotNull(result);
+                assertEquals(1, result.getTotalElements());
+                assertEquals(1, result.getContent().size());
+                assertEquals(VALID_TITLE, result.getContent().get(0).title());
+            }
+
+            @Test
+            @DisplayName("Should return products when all filter fields are null (no filtering)")
+            void shouldReturnProducts_whenAllFiltersAreNull() {
+                // Arrange
+                ProductFilterDTO filter = emptyFilter();
+                Pageable pageable = validPageable();
+                Page<ProductResponseDTO> expectedPage = singleProductPage(pageable);
+
+                when(productRepository.findByFilters(null, null, null, null, pageable))
+                        .thenReturn(expectedPage);
+
+                // Act
+                Page<ProductResponseDTO> result = productService.getProducts(filter, pageable);
+
+                // Assert
+                assertNotNull(result);
+                assertEquals(1, result.getTotalElements());
+            }
+
+            @Test
+            @DisplayName("Should return products when only minPrice filter is set")
+            void shouldReturnProducts_whenOnlyMinPriceIsSet() {
+                // Arrange
+                ProductFilterDTO filter = new ProductFilterDTO(null, 500L, null, null);
+                Pageable pageable = validPageable();
+                Page<ProductResponseDTO> expectedPage = singleProductPage(pageable);
+
+                when(productRepository.findByFilters(null, 500L, null, null, pageable))
+                        .thenReturn(expectedPage);
+
+                // Act
+                Page<ProductResponseDTO> result = productService.getProducts(filter, pageable);
+
+                // Assert
+                assertNotNull(result);
+                assertEquals(1, result.getTotalElements());
+            }
+
+            @Test
+            @DisplayName("Should return products when only maxPrice filter is set")
+            void shouldReturnProducts_whenOnlyMaxPriceIsSet() {
+                // Arrange
+                ProductFilterDTO filter = new ProductFilterDTO(null, null, 9999L, null);
+                Pageable pageable = validPageable();
+                Page<ProductResponseDTO> expectedPage = singleProductPage(pageable);
+
+                when(productRepository.findByFilters(null, null, 9999L, null, pageable))
+                        .thenReturn(expectedPage);
+
+                // Act
+                Page<ProductResponseDTO> result = productService.getProducts(filter, pageable);
+
+                // Assert
+                assertNotNull(result);
+                assertEquals(1, result.getTotalElements());
+            }
+
+            @Test
+            @DisplayName("Should return products when sorting by 'title' ascending")
+            void shouldReturnProducts_whenSortingByTitleAsc() {
+                // Arrange
+                ProductFilterDTO filter = emptyFilter();
+                Pageable pageable = PageRequest.of(0, 10, Sort.by(Sort.Direction.ASC, "title"));
+                Page<ProductResponseDTO> expectedPage = singleProductPage(pageable);
+
+                when(productRepository.findByFilters(null, null, null, null, pageable))
+                        .thenReturn(expectedPage);
+
+                // Act
+                Page<ProductResponseDTO> result = productService.getProducts(filter, pageable);
+
+                // Assert
+                assertNotNull(result);
+                assertEquals(1, result.getTotalElements());
+            }
+
+            @Test
+            @DisplayName("Should return products when sorting by 'price' descending")
+            void shouldReturnProducts_whenSortingByPriceDesc() {
+                // Arrange
+                ProductFilterDTO filter = emptyFilter();
+                Pageable pageable = PageRequest.of(0, 10, Sort.by(Sort.Direction.DESC, "price"));
+                Page<ProductResponseDTO> expectedPage = singleProductPage(pageable);
+
+                when(productRepository.findByFilters(null, null, null, null, pageable))
+                        .thenReturn(expectedPage);
+
+                // Act
+                Page<ProductResponseDTO> result = productService.getProducts(filter, pageable);
+
+                // Assert
+                assertNotNull(result);
+                assertEquals(1, result.getTotalElements());
+            }
+
+            @Test
+            @DisplayName("Should return products when pageable has no sort (unsorted)")
+            void shouldReturnProducts_whenPageableIsUnsorted() {
+                // Arrange
+                ProductFilterDTO filter = emptyFilter();
+                Pageable pageable = PageRequest.of(0, 10);
+                Page<ProductResponseDTO> expectedPage = singleProductPage(pageable);
+
+                when(productRepository.findByFilters(null, null, null, null, pageable))
+                        .thenReturn(expectedPage);
+
+                // Act
+                Page<ProductResponseDTO> result = productService.getProducts(filter, pageable);
+
+                // Assert
+                assertNotNull(result);
+                assertEquals(1, result.getTotalElements());
+            }
+
+            @Test
+            @DisplayName("Should return products when sorting by both 'title' and 'price'")
+            void shouldReturnProducts_whenSortingByMultipleAllowedFields() {
+                // Arrange
+                ProductFilterDTO filter = emptyFilter();
+                Pageable pageable = PageRequest.of(0, 10,
+                        Sort.by(Sort.Order.asc("title"), Sort.Order.desc("price")));
+                Page<ProductResponseDTO> expectedPage = singleProductPage(pageable);
+
+                when(productRepository.findByFilters(null, null, null, null, pageable))
+                        .thenReturn(expectedPage);
+
+                // Act
+                Page<ProductResponseDTO> result = productService.getProducts(filter, pageable);
+
+                // Assert
+                assertNotNull(result);
+                assertEquals(1, result.getTotalElements());
+            }
+        }
+
+        // ==================== VALIDATION FAILURE CASES (InvalidDataException) ====================
+
+        @Nested
+        @DisplayName("Validation failure cases")
+        class ValidationFailures {
+
+            @Test
+            @DisplayName("Should throw InvalidDataException when minPrice is greater than maxPrice")
+            void shouldThrowInvalidDataException_whenMinPriceGreaterThanMaxPrice() {
+                // Arrange
+                ProductFilterDTO filter = new ProductFilterDTO(null, 5000L, 1000L, null);
+                Pageable pageable = validPageable();
+
+                // Act & Assert
+                InvalidDataException exception = assertThrows(
+                        InvalidDataException.class,
+                        () -> productService.getProducts(filter, pageable)
+                );
+                assertEquals("Minimum price must be less than or equal to maximum price",
+                        exception.getMessage());
+            }
+
+            @Test
+            @DisplayName("Should not call repository when minPrice is greater than maxPrice")
+            void shouldNotCallRepository_whenMinPriceGreaterThanMaxPrice() {
+                // Arrange
+                ProductFilterDTO filter = new ProductFilterDTO(null, 5000L, 1000L, null);
+                Pageable pageable = validPageable();
+
+                // Act
+                assertThrows(InvalidDataException.class,
+                        () -> productService.getProducts(filter, pageable));
+
+                // Assert
+                verifyNoInteractions(productRepository);
+            }
+
+            @Test
+            @DisplayName("Should throw InvalidDataException when sort field is not allowed")
+            void shouldThrowInvalidDataException_whenSortFieldIsNotAllowed() {
+                // Arrange
+                ProductFilterDTO filter = emptyFilter();
+                Pageable pageable = PageRequest.of(0, 10, Sort.by("description"));
+
+                // Act & Assert
+                InvalidDataException exception = assertThrows(
+                        InvalidDataException.class,
+                        () -> productService.getProducts(filter, pageable)
+                );
+                assertEquals("Sorting by 'description' is not allowed",
+                        exception.getMessage());
+            }
+
+            @Test
+            @DisplayName("Should throw InvalidDataException when sorting by 'id' (not in allowed set)")
+            void shouldThrowInvalidDataException_whenSortingById() {
+                // Arrange
+                ProductFilterDTO filter = emptyFilter();
+                Pageable pageable = PageRequest.of(0, 10, Sort.by("id"));
+
+                // Act & Assert
+                InvalidDataException exception = assertThrows(
+                        InvalidDataException.class,
+                        () -> productService.getProducts(filter, pageable)
+                );
+                assertEquals("Sorting by 'id' is not allowed", exception.getMessage());
+            }
+
+            @Test
+            @DisplayName("Should throw InvalidDataException when sorting by 'quantity' (not in allowed set)")
+            void shouldThrowInvalidDataException_whenSortingByQuantity() {
+                // Arrange
+                ProductFilterDTO filter = emptyFilter();
+                Pageable pageable = PageRequest.of(0, 10, Sort.by("quantity"));
+
+                // Act & Assert
+                InvalidDataException exception = assertThrows(
+                        InvalidDataException.class,
+                        () -> productService.getProducts(filter, pageable)
+                );
+                assertEquals("Sorting by 'quantity' is not allowed", exception.getMessage());
+            }
+
+            @Test
+            @DisplayName("Should not call repository when sort field is not allowed")
+            void shouldNotCallRepository_whenSortFieldIsNotAllowed() {
+                // Arrange
+                ProductFilterDTO filter = emptyFilter();
+                Pageable pageable = PageRequest.of(0, 10, Sort.by("createdAt"));
+
+                // Act
+                assertThrows(InvalidDataException.class,
+                        () -> productService.getProducts(filter, pageable));
+
+                // Assert
+                verifyNoInteractions(productRepository);
+            }
+
+            @Test
+            @DisplayName("Should throw InvalidDataException when one of multiple sort fields is invalid")
+            void shouldThrowInvalidDataException_whenOneOfMultipleSortFieldsIsInvalid() {
+                // Arrange — "price" is valid, "createdAt" is not
+                ProductFilterDTO filter = emptyFilter();
+                Pageable pageable = PageRequest.of(0, 10,
+                        Sort.by(Sort.Order.asc("price"), Sort.Order.desc("createdAt")));
+
+                // Act & Assert
+                InvalidDataException exception = assertThrows(
+                        InvalidDataException.class,
+                        () -> productService.getProducts(filter, pageable)
+                );
+                assertEquals("Sorting by 'createdAt' is not allowed",
+                        exception.getMessage());
+            }
+        }
+
+        // ==================== REPOSITORY / SERVER FAILURE CASES ====================
+
+        @Nested
+        @DisplayName("Repository failure simulation")
+        class RepositoryFailures {
+
+            @Test
+            @DisplayName("Should propagate RuntimeException when repository throws on findByFilters")
+            void shouldPropagateRuntimeException_whenRepositoryThrows() {
+                // Arrange
+                ProductFilterDTO filter = emptyFilter();
+                Pageable pageable = validPageable();
+
+                when(productRepository.findByFilters(
+                        any(), any(), any(), any(), any(Pageable.class)))
+                        .thenThrow(new RuntimeException("Database connection lost"));
+
+                // Act & Assert
+                RuntimeException exception = assertThrows(
+                        RuntimeException.class,
+                        () -> productService.getProducts(filter, pageable)
+                );
+                assertEquals("Database connection lost", exception.getMessage());
+            }
+
+            @Test
+            @DisplayName("Should propagate IllegalStateException when repository encounters unexpected error")
+            void shouldPropagateIllegalStateException_whenRepositoryFails() {
+                // Arrange
+                ProductFilterDTO filter = emptyFilter();
+                Pageable pageable = validPageable();
+
+                when(productRepository.findByFilters(
+                        any(), any(), any(), any(), any(Pageable.class)))
+                        .thenThrow(new IllegalStateException("Unexpected persistence error"));
+
+                // Act & Assert
+                IllegalStateException exception = assertThrows(
+                        IllegalStateException.class,
+                        () -> productService.getProducts(filter, pageable)
+                );
+                assertEquals("Unexpected persistence error", exception.getMessage());
+            }
+        }
+
+        // ==================== EDGE CASES ====================
+
+        @Nested
+        @DisplayName("Edge cases")
+        class EdgeCases {
+
+            @Test
+            @DisplayName("Should return empty page when no products match filters")
+            void shouldReturnEmptyPage_whenNoProductsMatchFilters() {
+                // Arrange
+                ProductFilterDTO filter = validFilter();
+                Pageable pageable = validPageable();
+                Page<ProductResponseDTO> emptyPage = new PageImpl<>(
+                        List.of(), pageable, 0);
+
+                when(productRepository.findByFilters(
+                        filter.title(), filter.minPrice(), filter.maxPrice(),
+                        filter.category(), pageable))
+                        .thenReturn(emptyPage);
+
+                // Act
+                Page<ProductResponseDTO> result = productService.getProducts(filter, pageable);
+
+                // Assert
+                assertNotNull(result);
+                assertEquals(0, result.getTotalElements());
+                assertTrue(result.getContent().isEmpty());
+            }
+
+            @Test
+            @DisplayName("Should succeed when minPrice equals maxPrice (exact price match)")
+            void shouldSucceed_whenMinPriceEqualsMaxPrice() {
+                // Arrange
+                ProductFilterDTO filter = new ProductFilterDTO(null, 3000L, 3000L, null);
+                Pageable pageable = validPageable();
+                Page<ProductResponseDTO> expectedPage = singleProductPage(pageable);
+
+                when(productRepository.findByFilters(null, 3000L, 3000L, null, pageable))
+                        .thenReturn(expectedPage);
+
+                // Act
+                Page<ProductResponseDTO> result = productService.getProducts(filter, pageable);
+
+                // Assert
+                assertNotNull(result);
+                assertEquals(1, result.getTotalElements());
+            }
+
+            @Test
+            @DisplayName("Should succeed when minPrice is zero and maxPrice is set")
+            void shouldSucceed_whenMinPriceIsZero() {
+                // Arrange
+                ProductFilterDTO filter = new ProductFilterDTO(null, 0L, 5000L, null);
+                Pageable pageable = validPageable();
+                Page<ProductResponseDTO> expectedPage = singleProductPage(pageable);
+
+                when(productRepository.findByFilters(null, 0L, 5000L, null, pageable))
+                        .thenReturn(expectedPage);
+
+                // Act
+                Page<ProductResponseDTO> result = productService.getProducts(filter, pageable);
+
+                // Assert
+                assertNotNull(result);
+                assertEquals(1, result.getTotalElements());
+            }
+
+            @Test
+            @DisplayName("Should return multiple products across pages")
+            void shouldReturnMultipleProducts_acrossPages() {
+                // Arrange
+                ProductFilterDTO filter = emptyFilter();
+                Pageable pageable = PageRequest.of(0, 2, Sort.by("price"));
+
+                ProductResponseDTO product1 = new ProductResponseDTO(
+                        UUID.randomUUID(), "Product A", "Desc A",
+                        10, 1000L, "USD", "https://example.com/a.png"
+                );
+                ProductResponseDTO product2 = new ProductResponseDTO(
+                        UUID.randomUUID(), "Product B", "Desc B",
+                        20, 2000L, "USD", "https://example.com/b.png"
+                );
+                Page<ProductResponseDTO> expectedPage = new PageImpl<>(
+                        List.of(product1, product2), pageable, 5);
+
+                when(productRepository.findByFilters(null, null, null, null, pageable))
+                        .thenReturn(expectedPage);
+
+                // Act
+                Page<ProductResponseDTO> result = productService.getProducts(filter, pageable);
+
+                // Assert
+                assertNotNull(result);
+                assertEquals(5, result.getTotalElements());
+                assertEquals(2, result.getContent().size());
+                assertEquals(3, result.getTotalPages());
+            }
+        }
+
+        // ==================== REPOSITORY INTERACTION VERIFICATION ====================
+
+        @Nested
+        @DisplayName("Repository interaction verification")
+        class RepositoryInteractionVerification {
+
+            @Test
+            @DisplayName("Should call findByFilters exactly once with correct arguments")
+            void shouldCallFindByFilters_exactlyOnceWithCorrectArgs() {
+                // Arrange
+                ProductFilterDTO filter = validFilter();
+                Pageable pageable = validPageable();
+                Page<ProductResponseDTO> expectedPage = singleProductPage(pageable);
+
+                when(productRepository.findByFilters(
+                        filter.title(), filter.minPrice(), filter.maxPrice(),
+                        filter.category(), pageable))
+                        .thenReturn(expectedPage);
+
+                // Act
+                productService.getProducts(filter, pageable);
+
+                // Assert
+                verify(productRepository).findByFilters(
+                        filter.title(), filter.minPrice(), filter.maxPrice(),
+                        filter.category(), pageable);
+                verifyNoMoreInteractions(productRepository);
+            }
+
+            @Test
+            @DisplayName("Should not call save or findByIdAndIsActive when getting products list")
+            void shouldNotCallOtherRepositoryMethods_whenGettingProductsList() {
+                // Arrange
+                ProductFilterDTO filter = emptyFilter();
+                Pageable pageable = validPageable();
+                Page<ProductResponseDTO> expectedPage = singleProductPage(pageable);
+
+                when(productRepository.findByFilters(
+                        any(), any(), any(), any(), any(Pageable.class)))
+                        .thenReturn(expectedPage);
+
+                // Act
+                productService.getProducts(filter, pageable);
+
+                // Assert
+                verify(productRepository, never()).save(any(Product.class));
+                verify(productRepository, never()).findByIdAndIsActive(any(), anyBoolean());
             }
         }
     }
