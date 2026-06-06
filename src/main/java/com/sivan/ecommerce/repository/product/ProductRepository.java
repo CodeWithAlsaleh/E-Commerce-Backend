@@ -17,38 +17,43 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
 
     @Query(
             value = """
-                        SELECT
-                            p.id AS id,
-                            p.title AS title,
-                            p.description AS description,
-                            p.quantity AS quantity,
-                            p.price AS price,
-                            p.currency_code AS currencyCode,
-                            p.image_url AS imageUrl
-                        FROM `product` AS p
-                        LEFT JOIN `product_category` AS pc ON p.id = pc.product_id
-                        LEFT JOIN `category` AS c ON pc.category_id = c.id
-                        WHERE p.is_active = true
-                        AND (c.is_active = true OR c.id IS NULL)
-                        AND (:minPrice IS NULL OR p.price >= :minPrice)
-                        AND (:maxPrice IS NULL OR p.price <= :maxPrice)
-                        AND (:category IS NULL OR c.title = :category)
-                        AND (:title IS NULL OR MATCH(p.title) AGAINST (:title IN BOOLEAN MODE))
+                      SELECT
+                          p.id AS id,
+                          p.title AS title,
+                          p.description AS description,
+                          p.quantity AS quantity,
+                          p.price AS price,
+                          p.currency_code AS currencyCode,
+                          p.image_url AS imageUrl
+                      FROM product p
+                      WHERE p.is_active = true
+                      AND (:minPrice IS NULL OR p.price >= :minPrice)
+                      AND (:maxPrice IS NULL OR p.price <= :maxPrice)
+                      AND (:title IS NULL OR MATCH(p.title) AGAINST(:title IN BOOLEAN MODE))
+                      AND (:category IS NULL OR EXISTS (
+                                                  SELECT 1
+                                                  FROM product_category pc
+                                                  INNER JOIN category c ON c.id = pc.category_id
+                                                  WHERE pc.product_id = p.id
+                                                  AND c.is_active = true
+                                                  AND c.title = :category))
                     """,
             countQuery = """
-                        SELECT COUNT(p.id)
-                        FROM `product` AS p
-                        LEFT JOIN `product_category` AS pc ON p.id = pc.product_id
-                        LEFT JOIN `category` AS c ON pc.category_id = c.id
-                        WHERE p.is_active = true
-                        AND (c.is_active = true OR c.id IS NULL)
-                        AND (:minPrice IS NULL OR p.price >= :minPrice)
-                        AND (:maxPrice IS NULL OR p.price <= :maxPrice)
-                        AND (:category IS NULL OR c.title = :category)
-                        AND (:title IS NULL OR MATCH(p.title) AGAINST (:title IN BOOLEAN MODE))
+                      SELECT COUNT(*)
+                      FROM product p
+                      WHERE p.is_active = true
+                      AND (:minPrice IS NULL OR p.price >= :minPrice)
+                      AND (:maxPrice IS NULL OR p.price <= :maxPrice)
+                      AND (:title IS NULL OR MATCH(p.title) AGAINST(:title IN BOOLEAN MODE))
+                      AND (:category IS NULL OR EXISTS (
+                                                  SELECT 1
+                                                  FROM product_category pc
+                                                  INNER JOIN category c ON c.id = pc.category_id
+                                                  WHERE pc.product_id = p.id
+                                                  AND c.is_active = true
+                                                  AND c.title = :category))
                     """,
-            nativeQuery = true
-    )
+            nativeQuery = true)
     Page<ProductResponseDTO> findByFilters(@Param("title") String title,
                                            @Param("minPrice") Long minPrice,
                                            @Param("maxPrice") Long maxPrice,
