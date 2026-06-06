@@ -57,7 +57,7 @@ public class ProductServiceImpl implements ProductService {
         }
 
         return productRepository.findByFilters(
-                productFilterDTO.title(),
+                productFilterDTO.search(),
                 productFilterDTO.minPrice(),
                 productFilterDTO.maxPrice(),
                 productFilterDTO.category(),
