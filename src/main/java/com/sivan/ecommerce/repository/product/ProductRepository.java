@@ -18,7 +18,7 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
     @Query(
             value = """
                       SELECT
-                          p.id AS id,
+                          BIN_TO_UUID(p.id) AS id,
                           p.title AS title,
                           p.description AS description,
                           p.quantity AS quantity,
@@ -29,7 +29,7 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
                       WHERE p.is_active = true
                       AND (:minPrice IS NULL OR p.price >= :minPrice)
                       AND (:maxPrice IS NULL OR p.price <= :maxPrice)
-                      AND (:title IS NULL OR MATCH(p.title) AGAINST(:title IN BOOLEAN MODE))
+                      AND (:search IS NULL OR MATCH(p.title, p.description) AGAINST(:search IN BOOLEAN MODE))
                       AND (:category IS NULL OR EXISTS (
                                                   SELECT 1
                                                   FROM product_category pc
@@ -44,7 +44,7 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
                       WHERE p.is_active = true
                       AND (:minPrice IS NULL OR p.price >= :minPrice)
                       AND (:maxPrice IS NULL OR p.price <= :maxPrice)
-                      AND (:title IS NULL OR MATCH(p.title) AGAINST(:title IN BOOLEAN MODE))
+                      AND (:search IS NULL OR MATCH(p.title, p.description) AGAINST(:search IN BOOLEAN MODE))
                       AND (:category IS NULL OR EXISTS (
                                                   SELECT 1
                                                   FROM product_category pc
@@ -54,7 +54,7 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
                                                   AND c.title = :category))
                     """,
             nativeQuery = true)
-    Page<ProductResponseDTO> findByFilters(@Param("title") String title,
+    Page<ProductResponseDTO> findByFilters(@Param("search") String search,
                                            @Param("minPrice") Long minPrice,
                                            @Param("maxPrice") Long maxPrice,
                                            @Param("category") String category,
