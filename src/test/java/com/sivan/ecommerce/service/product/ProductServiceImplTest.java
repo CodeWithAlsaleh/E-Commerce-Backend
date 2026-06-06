@@ -131,7 +131,7 @@ class ProductServiceImplTest {
 
                 // Assert
                 assertNotNull(response);
-                assertEquals(expectedId, response.id());
+                assertEquals(expectedId.toString(), response.id());
                 assertEquals(VALID_TITLE.trim(), response.title());
                 assertEquals(VALID_DESCRIPTION.trim(), response.description());
                 assertEquals(VALID_QUANTITY, response.quantity());
@@ -170,7 +170,7 @@ class ProductServiceImplTest {
 
                 // Assert
                 assertNotNull(response);
-                assertEquals(expectedId, response.id());
+                assertEquals(expectedId.toString(), response.id());
                 assertNull(response.description());
                 verify(productRepository).save(any(Product.class));
             }
@@ -448,7 +448,7 @@ class ProductServiceImplTest {
          */
         private ProductResponseDTO validProductResponse(UUID id) {
             return new ProductResponseDTO(
-                    id,
+                    id.toString(),
                     VALID_TITLE,
                     VALID_DESCRIPTION,
                     VALID_QUANTITY,
@@ -478,7 +478,7 @@ class ProductServiceImplTest {
 
                 // Assert
                 assertNotNull(response);
-                assertEquals(productId, response.id());
+                assertEquals(productId.toString(), response.id());
                 assertEquals(VALID_TITLE, response.title());
                 assertEquals(VALID_DESCRIPTION, response.description());
                 assertEquals(VALID_QUANTITY, response.quantity());
@@ -508,7 +508,7 @@ class ProductServiceImplTest {
                 // Arrange
                 UUID productId = UUID.randomUUID();
                 ProductResponseDTO expectedResponse = new ProductResponseDTO(
-                        productId, VALID_TITLE, null, VALID_QUANTITY,
+                        productId.toString(), VALID_TITLE, null, VALID_QUANTITY,
                         VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
                 );
                 when(productRepository.findByIdAndIsActive(productId, true))
@@ -614,7 +614,7 @@ class ProductServiceImplTest {
                 // Arrange
                 UUID productId = UUID.randomUUID();
                 ProductResponseDTO expectedResponse = new ProductResponseDTO(
-                        productId, VALID_TITLE, VALID_DESCRIPTION, 0,
+                        productId.toString(), VALID_TITLE, VALID_DESCRIPTION, 0,
                         VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
                 );
                 when(productRepository.findByIdAndIsActive(productId, true))
@@ -634,7 +634,7 @@ class ProductServiceImplTest {
                 // Arrange
                 UUID productId = UUID.randomUUID();
                 ProductResponseDTO expectedResponse = new ProductResponseDTO(
-                        productId, VALID_TITLE, VALID_DESCRIPTION, VALID_QUANTITY,
+                        productId.toString(), VALID_TITLE, VALID_DESCRIPTION, VALID_QUANTITY,
                         0L, VALID_CURRENCY, VALID_IMAGE_URL
                 );
                 when(productRepository.findByIdAndIsActive(productId, true))
@@ -654,7 +654,7 @@ class ProductServiceImplTest {
                 // Arrange
                 UUID productId = UUID.randomUUID();
                 ProductResponseDTO expectedResponse = new ProductResponseDTO(
-                        productId, VALID_TITLE, VALID_DESCRIPTION, VALID_QUANTITY,
+                        productId.toString(), VALID_TITLE, VALID_DESCRIPTION, VALID_QUANTITY,
                         Long.MAX_VALUE, VALID_CURRENCY, VALID_IMAGE_URL
                 );
                 when(productRepository.findByIdAndIsActive(productId, true))
@@ -676,7 +676,7 @@ class ProductServiceImplTest {
                 String specialTitle = "Laptop™ — Pro Edition «2024»";
                 String specialDescription = "Features: résumé-ready display, naïve AI engine, 日本語サポート & more!";
                 ProductResponseDTO expectedResponse = new ProductResponseDTO(
-                        productId, specialTitle, specialDescription, VALID_QUANTITY,
+                        productId.toString(), specialTitle, specialDescription, VALID_QUANTITY,
                         VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
                 );
                 when(productRepository.findByIdAndIsActive(productId, true))
@@ -698,7 +698,7 @@ class ProductServiceImplTest {
                 UUID productId = UUID.randomUUID();
                 String longDescription = "X".repeat(5000);
                 ProductResponseDTO expectedResponse = new ProductResponseDTO(
-                        productId, VALID_TITLE, longDescription, VALID_QUANTITY,
+                        productId.toString(), VALID_TITLE, longDescription, VALID_QUANTITY,
                         VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
                 );
                 when(productRepository.findByIdAndIsActive(productId, true))
@@ -753,7 +753,7 @@ class ProductServiceImplTest {
          */
         private Page<ProductResponseDTO> singleProductPage(Pageable pageable) {
             ProductResponseDTO product = new ProductResponseDTO(
-                    UUID.randomUUID(),
+                    UUID.randomUUID().toString(),
                     VALID_TITLE,
                     VALID_DESCRIPTION,
                     VALID_QUANTITY,
@@ -779,7 +779,7 @@ class ProductServiceImplTest {
                 Page<ProductResponseDTO> expectedPage = singleProductPage(pageable);
 
                 when(productRepository.findByFilters(
-                        filter.title(), filter.minPrice(), filter.maxPrice(),
+                        filter.search(), filter.minPrice(), filter.maxPrice(),
                         filter.category(), pageable))
                         .thenReturn(expectedPage);
 
@@ -1105,7 +1105,7 @@ class ProductServiceImplTest {
                         List.of(), pageable, 0);
 
                 when(productRepository.findByFilters(
-                        filter.title(), filter.minPrice(), filter.maxPrice(),
+                        filter.search(), filter.minPrice(), filter.maxPrice(),
                         filter.category(), pageable))
                         .thenReturn(emptyPage);
 
@@ -1164,11 +1164,11 @@ class ProductServiceImplTest {
                 Pageable pageable = PageRequest.of(0, 2, Sort.by("price"));
 
                 ProductResponseDTO product1 = new ProductResponseDTO(
-                        UUID.randomUUID(), "Product A", "Desc A",
+                        UUID.randomUUID().toString(), "Product A", "Desc A",
                         10, 1000L, "USD", "https://example.com/a.png"
                 );
                 ProductResponseDTO product2 = new ProductResponseDTO(
-                        UUID.randomUUID(), "Product B", "Desc B",
+                        UUID.randomUUID().toString(), "Product B", "Desc B",
                         20, 2000L, "USD", "https://example.com/b.png"
                 );
                 Page<ProductResponseDTO> expectedPage = new PageImpl<>(
@@ -1203,7 +1203,7 @@ class ProductServiceImplTest {
                 Page<ProductResponseDTO> expectedPage = singleProductPage(pageable);
 
                 when(productRepository.findByFilters(
-                        filter.title(), filter.minPrice(), filter.maxPrice(),
+                        filter.search(), filter.minPrice(), filter.maxPrice(),
                         filter.category(), pageable))
                         .thenReturn(expectedPage);
 
@@ -1212,7 +1212,7 @@ class ProductServiceImplTest {
 
                 // Assert
                 verify(productRepository).findByFilters(
-                        filter.title(), filter.minPrice(), filter.maxPrice(),
+                        filter.search(), filter.minPrice(), filter.maxPrice(),
                         filter.category(), pageable);
                 verifyNoMoreInteractions(productRepository);
             }

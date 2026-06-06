@@ -23,7 +23,7 @@ public class ProductMapper {
 
     public static ProductResponseDTO mapProductToProductResponse(Product product) {
         return new ProductResponseDTO(
-                product.getId(),
+                product.getId() != null ? product.getId().toString() : null,
                 product.getTitle(),
                 product.getDescription(),
                 product.getQuantity(),

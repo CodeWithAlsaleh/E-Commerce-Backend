@@ -189,7 +189,7 @@ class ProductMapperTest {
 
             // Assert
             assertNotNull(response);
-            assertEquals(expectedId, response.id());
+            assertEquals(expectedId.toString(), response.id());
             assertEquals(VALID_TITLE, response.title());
             assertEquals(VALID_DESCRIPTION, response.description());
             assertEquals(VALID_QUANTITY, response.quantity());

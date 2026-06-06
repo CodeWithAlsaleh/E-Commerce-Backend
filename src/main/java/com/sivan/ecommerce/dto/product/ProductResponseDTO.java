@@ -1,8 +1,6 @@
 package com.sivan.ecommerce.dto.product;
 
-import java.util.UUID;
-
-public record ProductResponseDTO(UUID id,
+public record ProductResponseDTO(String id,
                                  String title,
                                  String description,
                                  int quantity,

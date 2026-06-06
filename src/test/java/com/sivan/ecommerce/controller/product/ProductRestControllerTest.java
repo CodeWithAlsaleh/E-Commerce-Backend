@@ -18,7 +18,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -79,7 +78,7 @@ class ProductRestControllerTest {
 
         private ProductResponseDTO validResponse(UUID id) {
             return new ProductResponseDTO(
-                    id, VALID_TITLE, VALID_DESCRIPTION,
+                    id.toString(), VALID_TITLE, VALID_DESCRIPTION,
                     VALID_QUANTITY, VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
             );
         }
@@ -126,7 +125,7 @@ class ProductRestControllerTest {
                         VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
                 );
                 ProductResponseDTO response = new ProductResponseDTO(
-                        expectedId, VALID_TITLE, null,
+                        expectedId.toString(), VALID_TITLE, null,
                         VALID_QUANTITY, VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
                 );
                 when(productService.createProduct(any(ProductRequestDTO.class))).thenReturn(response);
@@ -738,7 +737,7 @@ class ProductRestControllerTest {
                         VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
                 );
                 ProductResponseDTO response = new ProductResponseDTO(
-                        expectedId, "Abc", VALID_DESCRIPTION,
+                        expectedId.toString(), "Abc", VALID_DESCRIPTION,
                         VALID_QUANTITY, VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
                 );
                 when(productService.createProduct(any(ProductRequestDTO.class))).thenReturn(response);
@@ -763,7 +762,7 @@ class ProductRestControllerTest {
                         VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
                 );
                 ProductResponseDTO response = new ProductResponseDTO(
-                        expectedId, maxTitle, VALID_DESCRIPTION,
+                        expectedId.toString(), maxTitle, VALID_DESCRIPTION,
                         VALID_QUANTITY, VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
                 );
                 when(productService.createProduct(any(ProductRequestDTO.class))).thenReturn(response);
@@ -786,7 +785,7 @@ class ProductRestControllerTest {
                         0L, VALID_CURRENCY, VALID_IMAGE_URL
                 );
                 ProductResponseDTO response = new ProductResponseDTO(
-                        expectedId, VALID_TITLE, VALID_DESCRIPTION,
+                        expectedId.toString(), VALID_TITLE, VALID_DESCRIPTION,
                         0, 0L, VALID_CURRENCY, VALID_IMAGE_URL
                 );
                 when(productService.createProduct(any(ProductRequestDTO.class))).thenReturn(response);
@@ -812,7 +811,7 @@ class ProductRestControllerTest {
                         VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
                 );
                 ProductResponseDTO response = new ProductResponseDTO(
-                        expectedId, VALID_TITLE, exactly40,
+                        expectedId.toString(), VALID_TITLE, exactly40,
                         VALID_QUANTITY, VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
                 );
                 when(productService.createProduct(any(ProductRequestDTO.class))).thenReturn(response);
@@ -836,7 +835,7 @@ class ProductRestControllerTest {
 
         private ProductResponseDTO validProductResponse(UUID id) {
             return new ProductResponseDTO(
-                    id, VALID_TITLE, VALID_DESCRIPTION,
+                    id.toString(), VALID_TITLE, VALID_DESCRIPTION,
                     VALID_QUANTITY, VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
             );
         }
@@ -875,7 +874,7 @@ class ProductRestControllerTest {
                 // Arrange
                 UUID productId = UUID.randomUUID();
                 ProductResponseDTO response = new ProductResponseDTO(
-                        productId, VALID_TITLE, null,
+                        productId.toString(), VALID_TITLE, null,
                         VALID_QUANTITY, VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
                 );
                 when(productService.getProduct(eq(productId))).thenReturn(response);
@@ -1062,7 +1061,7 @@ class ProductRestControllerTest {
          */
         private Page<ProductResponseDTO> singleProductPage() {
             ProductResponseDTO product = new ProductResponseDTO(
-                    UUID.randomUUID(), VALID_TITLE, VALID_DESCRIPTION,
+                    UUID.randomUUID().toString(), VALID_TITLE, VALID_DESCRIPTION,
                     VALID_QUANTITY, VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
             );
             return new PageImpl<>(List.of(product), PageRequest.of(0, 10), 1);
@@ -1255,10 +1254,10 @@ class ProductRestControllerTest {
             // ---------- title ----------
 
             @Test
-            @DisplayName("Should return 400 when title is shorter than 3 characters")
+            @DisplayName("Should return 400 when search is shorter than 3 characters")
             void shouldReturn400_whenTitleTooShort() throws Exception {
                 mockMvc.perform(get(PRODUCTS_URL)
-                                .param("title", "AB"))
+                                .param("search", "AB"))
                         .andExpect(status().isBadRequest())
                         .andExpect(jsonPath("$.status").value(400))
                         .andExpect(jsonPath("$.message").isNotEmpty());
@@ -1267,10 +1266,10 @@ class ProductRestControllerTest {
             }
 
             @Test
-            @DisplayName("Should return 400 when title is blank")
+            @DisplayName("Should return 400 when search is blank")
             void shouldReturn400_whenTitleIsBlank() throws Exception {
                 mockMvc.perform(get(PRODUCTS_URL)
-                                .param("title", "                   "))
+                                .param("search", "                   "))
                         .andExpect(status().isBadRequest())
                         .andExpect(jsonPath("$.status").value(400))
                         .andExpect(jsonPath("$.message").isNotEmpty());
@@ -1279,10 +1278,10 @@ class ProductRestControllerTest {
             }
 
             @Test
-            @DisplayName("Should return 400 when title exceeds 255 characters")
+            @DisplayName("Should return 400 when search exceeds 255 characters")
             void shouldReturn400_whenTitleTooLong() throws Exception {
                 mockMvc.perform(get(PRODUCTS_URL)
-                                .param("title", "A".repeat(256)))
+                                .param("search", "A".repeat(256)))
                         .andExpect(status().isBadRequest())
                         .andExpect(jsonPath("$.message").isNotEmpty());
 
@@ -1580,11 +1579,11 @@ class ProductRestControllerTest {
             void shouldReturn200_withMultipleProducts() throws Exception {
                 // Arrange
                 ProductResponseDTO product1 = new ProductResponseDTO(
-                        UUID.randomUUID(), "Product One", VALID_DESCRIPTION,
+                        UUID.randomUUID().toString(), "Product One", VALID_DESCRIPTION,
                         VALID_QUANTITY, 2999L, VALID_CURRENCY, VALID_IMAGE_URL
                 );
                 ProductResponseDTO product2 = new ProductResponseDTO(
-                        UUID.randomUUID(), "Product Two", VALID_DESCRIPTION,
+                        UUID.randomUUID().toString(), "Product Two", VALID_DESCRIPTION,
                         VALID_QUANTITY, 4999L, VALID_CURRENCY, VALID_IMAGE_URL
                 );
                 Page<ProductResponseDTO> multiPage = new PageImpl<>(
