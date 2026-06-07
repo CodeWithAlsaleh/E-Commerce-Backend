@@ -1,6 +1,6 @@
 package com.sivan.ecommerce.exception;
 
-public class CustomerAlreadyExistsException extends RuntimeException {
+public class CustomerAlreadyExistsException extends ResourceConflictException {
 
     public CustomerAlreadyExistsException(String message) {
         super(message);

@@ -1,7 +1,7 @@
 package com.sivan.ecommerce.advice;
 
-import com.sivan.ecommerce.exception.CustomerAlreadyExistsException;
 import com.sivan.ecommerce.exception.InvalidDataException;
+import com.sivan.ecommerce.exception.ResourceConflictException;
 import com.sivan.ecommerce.exception.ResourceNotFoundException;
 import com.sivan.ecommerce.response.ErrorResponse;
 import org.springframework.http.HttpStatus;
@@ -66,8 +66,8 @@ public class GlobalExceptionHandler {
         return buildError(HttpStatus.BAD_REQUEST, exception.getMessage());
     }
 
-    @ExceptionHandler(CustomerAlreadyExistsException.class)
-    public ResponseEntity<ErrorResponse> handleException(CustomerAlreadyExistsException exception) {
+    @ExceptionHandler(ResourceConflictException.class)
+    public ResponseEntity<ErrorResponse> handleException(ResourceConflictException exception) {
         return buildError(HttpStatus.CONFLICT, exception.getMessage());
     }
 
