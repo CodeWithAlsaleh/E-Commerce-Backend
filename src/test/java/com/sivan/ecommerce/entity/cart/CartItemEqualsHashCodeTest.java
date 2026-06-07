@@ -23,7 +23,7 @@ class CartItemEqualsHashCodeTest {
 
         customer.setCart(cart);
         EntityTestUtil.setId(cart, id);
-        
+
         return cart;
     }
 
@@ -42,11 +42,16 @@ class CartItemEqualsHashCodeTest {
         @Test
         @DisplayName("same cart + same product → equal")
         void sameCartAndProduct_shouldBeEqual() {
-            UUID cartId = UUID.randomUUID();
-            UUID productId = UUID.randomUUID();
+            Cart cart = createCartWithId(UUID.randomUUID());
+            Product product = createProductWithId(UUID.randomUUID());
 
-            CartItem item1 = new CartItem(createCartWithId(cartId), createProductWithId(productId), 1);
-            CartItem item2 = new CartItem(createCartWithId(cartId), createProductWithId(productId), 5);
+            CartItem item1 = new CartItem(1);
+            item1.setCart(cart);
+            item1.setProduct(product);
+
+            CartItem item2 = new CartItem(1);
+            item2.setCart(cart);
+            item2.setProduct(product);
 
             assertEquals(item1, item2);
         }
@@ -54,10 +59,18 @@ class CartItemEqualsHashCodeTest {
         @Test
         @DisplayName("different cart + same product → not equal")
         void differentCart_shouldNotBeEqual() {
-            UUID productId = UUID.randomUUID();
+            Cart cart1 = createCartWithId(UUID.randomUUID());
+            Cart cart2 = createCartWithId(UUID.randomUUID());
 
-            CartItem item1 = new CartItem(createCartWithId(UUID.randomUUID()), createProductWithId(productId), 1);
-            CartItem item2 = new CartItem(createCartWithId(UUID.randomUUID()), createProductWithId(productId), 1);
+            Product product = createProductWithId(UUID.randomUUID());
+
+            CartItem item1 = new CartItem(1);
+            item1.setCart(cart1);
+            item1.setProduct(product);
+
+            CartItem item2 = new CartItem(1);
+            item2.setCart(cart2);
+            item2.setProduct(product);
 
             assertNotEquals(item1, item2);
         }
@@ -65,10 +78,18 @@ class CartItemEqualsHashCodeTest {
         @Test
         @DisplayName("same cart + different product → not equal")
         void differentProduct_shouldNotBeEqual() {
-            UUID cartId = UUID.randomUUID();
+            Cart cart = createCartWithId(UUID.randomUUID());
 
-            CartItem item1 = new CartItem(createCartWithId(cartId), createProductWithId(UUID.randomUUID()), 1);
-            CartItem item2 = new CartItem(createCartWithId(cartId), createProductWithId(UUID.randomUUID()), 1);
+            Product product1 = createProductWithId(UUID.randomUUID());
+            Product product2 = createProductWithId(UUID.randomUUID());
+
+            CartItem item1 = new CartItem(1);
+            item1.setCart(cart);
+            item1.setProduct(product1);
+
+            CartItem item2 = new CartItem(1);
+            item2.setCart(cart);
+            item2.setProduct(product2);
 
             assertNotEquals(item1, item2);
         }
@@ -76,7 +97,12 @@ class CartItemEqualsHashCodeTest {
         @Test
         @DisplayName("same instance → equal (reflexive)")
         void sameInstance_shouldBeEqual() {
-            CartItem item = new CartItem(createCartWithId(UUID.randomUUID()), createProductWithId(UUID.randomUUID()), 1);
+            Cart cart = createCartWithId(UUID.randomUUID());
+            Product product = createProductWithId(UUID.randomUUID());
+
+            CartItem item = new CartItem(1);
+            item.setCart(cart);
+            item.setProduct(product);
 
             assertEquals(item, item);
         }
@@ -84,7 +110,12 @@ class CartItemEqualsHashCodeTest {
         @Test
         @DisplayName("null → not equal")
         void null_shouldNotBeEqual() {
-            CartItem item = new CartItem(createCartWithId(UUID.randomUUID()), createProductWithId(UUID.randomUUID()), 1);
+            Cart cart = createCartWithId(UUID.randomUUID());
+            Product product = createProductWithId(UUID.randomUUID());
+
+            CartItem item = new CartItem(1);
+            item.setCart(cart);
+            item.setProduct(product);
 
             assertNotEquals(null, item);
         }
@@ -92,7 +123,12 @@ class CartItemEqualsHashCodeTest {
         @Test
         @DisplayName("different type → not equal")
         void differentType_shouldNotBeEqual() {
-            CartItem item = new CartItem(createCartWithId(UUID.randomUUID()), createProductWithId(UUID.randomUUID()), 1);
+            Cart cart = createCartWithId(UUID.randomUUID());
+            Product product = createProductWithId(UUID.randomUUID());
+
+            CartItem item = new CartItem(1);
+            item.setCart(cart);
+            item.setProduct(product);
 
             assertNotEquals("a string", item);
         }
@@ -100,11 +136,16 @@ class CartItemEqualsHashCodeTest {
         @Test
         @DisplayName("different quantity but same cart+product → still equal (quantity is not part of identity)")
         void differentQuantity_shouldStillBeEqual() {
-            UUID cartId = UUID.randomUUID();
-            UUID productId = UUID.randomUUID();
+            Cart cart = createCartWithId(UUID.randomUUID());
+            Product product = createProductWithId(UUID.randomUUID());
 
-            CartItem item1 = new CartItem(createCartWithId(cartId), createProductWithId(productId), 1);
-            CartItem item2 = new CartItem(createCartWithId(cartId), createProductWithId(productId), 99);
+            CartItem item1 = new CartItem(1);
+            item1.setCart(cart);
+            item1.setProduct(product);
+
+            CartItem item2 = new CartItem(99);
+            item2.setCart(cart);
+            item2.setProduct(product);
 
             assertEquals(item1, item2);
         }
@@ -119,11 +160,16 @@ class CartItemEqualsHashCodeTest {
         @Test
         @DisplayName("same cart + same product → same hashCode")
         void sameCartAndProduct_shouldHaveSameHashCode() {
-            UUID cartId = UUID.randomUUID();
-            UUID productId = UUID.randomUUID();
+            Cart cart = createCartWithId(UUID.randomUUID());
+            Product product = createProductWithId(UUID.randomUUID());
 
-            CartItem item1 = new CartItem(createCartWithId(cartId), createProductWithId(productId), 1);
-            CartItem item2 = new CartItem(createCartWithId(cartId), createProductWithId(productId), 5);
+            CartItem item1 = new CartItem(1);
+            item1.setCart(cart);
+            item1.setProduct(product);
+
+            CartItem item2 = new CartItem(99);
+            item2.setCart(cart);
+            item2.setProduct(product);
 
             assertEquals(item1.hashCode(), item2.hashCode());
         }
@@ -131,8 +177,19 @@ class CartItemEqualsHashCodeTest {
         @Test
         @DisplayName("different cart or product → different hashCode")
         void differentCartOrProduct_shouldHaveDifferentHashCode() {
-            CartItem item1 = new CartItem(createCartWithId(UUID.randomUUID()), createProductWithId(UUID.randomUUID()), 1);
-            CartItem item2 = new CartItem(createCartWithId(UUID.randomUUID()), createProductWithId(UUID.randomUUID()), 1);
+            Cart cart1 = createCartWithId(UUID.randomUUID());
+            Cart cart2 = createCartWithId(UUID.randomUUID());
+
+            Product product1 = createProductWithId(UUID.randomUUID());
+            Product product2 = createProductWithId(UUID.randomUUID());
+
+            CartItem item1 = new CartItem(1);
+            item1.setCart(cart1);
+            item1.setProduct(product1);
+
+            CartItem item2 = new CartItem(1);
+            item2.setCart(cart2);
+            item2.setProduct(product2);
 
             assertNotEquals(item1.hashCode(), item2.hashCode());
         }
@@ -140,10 +197,15 @@ class CartItemEqualsHashCodeTest {
         @Test
         @DisplayName("consistent: multiple calls return same value")
         void shouldBeConsistent() {
-            CartItem item1 = new CartItem(createCartWithId(UUID.randomUUID()), createProductWithId(UUID.randomUUID()), 1);
+            Cart cart = createCartWithId(UUID.randomUUID());
+            Product product = createProductWithId(UUID.randomUUID());
 
-            int hash1 = item1.hashCode();
-            int hash2 = item1.hashCode();
+            CartItem item = new CartItem(1);
+            item.setCart(cart);
+            item.setProduct(product);
+
+            int hash1 = item.hashCode();
+            int hash2 = item.hashCode();
 
             assertEquals(hash1, hash2);
         }
