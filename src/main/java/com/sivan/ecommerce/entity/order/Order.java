@@ -52,9 +52,17 @@ public class Order extends BaseEntity {
     }
 
     public void addOrderItem(OrderItem orderItem) {
-        orderItems.add(orderItem);
-
+        /*
+         *   NOTE: We need to set the product on orderItem before calling this method
+         *
+         *   QUESTION: Why we set the order before adding "orderItem" to the set ?
+         *
+         *   ANSWER: "Cuz hashCode & equals" for "OrderItem" entity depends on
+         *           both "product & order" to be set in order to work fine.
+         * */
         orderItem.setOrder(this);
+
+        orderItems.add(orderItem);
     }
 
     public Customer getCustomer() {

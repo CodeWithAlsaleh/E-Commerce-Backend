@@ -34,9 +34,17 @@ public class Cart extends BaseEntity {
     }
 
     public void addCartItem(CartItem cartItem) {
-        cartItems.add(cartItem);
-
+        /*
+         *   NOTE: We need to set the product on cartItem before calling this method
+         *
+         *   QUESTION: Why we set the cart before adding "cartItem" to the set ?
+         *
+         *   ANSWER: "Cuz hashCode & equals" for "CartItem" entity depends on
+         *           both "product & cart" to be set in order to work fine.
+         * */
         cartItem.setCart(this);
+
+        cartItems.add(cartItem);
     }
 
     public Customer getCustomer() {
