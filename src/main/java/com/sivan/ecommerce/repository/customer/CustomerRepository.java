@@ -9,6 +9,12 @@ import org.springframework.data.repository.query.Param;
 import java.util.Optional;
 import java.util.UUID;
 
+/*
+ *   TODO:
+ *       Review when we should return "Optional", cuz in some
+ *       cases "loadUserByUsername" will be already validated
+ *       that the customer exists.
+ * */
 public interface CustomerRepository extends JpaRepository<Customer, UUID> {
 
     boolean existsByEmail(String email);
@@ -37,4 +43,12 @@ public interface CustomerRepository extends JpaRepository<Customer, UUID> {
     Optional<Customer> findByEmailWithRoles(@Param("email") String email);
 
     Optional<CustomerResponseDTO> findByEmail(String email);
+
+    @Query("""
+            SELECT c
+            FROM Customer c
+            LEFT JOIN FETCH c.cart
+            WHERE c.email = :email
+            """)
+    Optional<Customer> findByEmailWithCart(String email);
 }
