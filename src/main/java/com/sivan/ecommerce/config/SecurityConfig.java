@@ -30,6 +30,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/customers/me").hasRole("USER")
                         .requestMatchers(HttpMethod.GET, "/products/{productId}").permitAll()
                         .requestMatchers(HttpMethod.GET, "/products").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/cart/items").hasRole("USER")
                         .anyRequest().authenticated());
 
         // We need to tell Spring Security that we are using basic authentication
