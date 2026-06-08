@@ -446,16 +446,14 @@ class ProductServiceImplTest {
         /**
          * Builds a valid {@link ProductResponseDTO} with all fields populated.
          */
-        private ProductResponseDTO validProductResponse(UUID id) {
-            return new ProductResponseDTO(
-                    id.toString(),
-                    VALID_TITLE,
-                    VALID_DESCRIPTION,
-                    VALID_QUANTITY,
-                    VALID_PRICE,
-                    VALID_CURRENCY,
-                    VALID_IMAGE_URL
+        private Product validProduct(UUID id) {
+            Product product = new Product(VALID_TITLE, VALID_DESCRIPTION, VALID_QUANTITY, VALID_PRICE,
+                    VALID_CURRENCY, VALID_IMAGE_URL
             );
+
+            EntityTestUtil.setId(product, id);
+
+            return product;
         }
 
         // ==================== SUCCESS CASES ====================
@@ -469,9 +467,9 @@ class ProductServiceImplTest {
             void shouldReturnProductResponseDTO_whenProductExistsAndIsActive() {
                 // Arrange
                 UUID productId = UUID.randomUUID();
-                ProductResponseDTO expectedResponse = validProductResponse(productId);
-                when(productRepository.findByIdAndIsActive(productId, true))
-                        .thenReturn(Optional.of(expectedResponse));
+                Product product = validProduct(productId);
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
 
                 // Act
                 ProductResponseDTO response = productService.getProduct(productId);
@@ -488,18 +486,18 @@ class ProductServiceImplTest {
             }
 
             @Test
-            @DisplayName("Should call repository findByIdAndIsActive exactly once with correct arguments")
-            void shouldCallRepositoryFindByIdAndIsActive_exactlyOnce() {
+            @DisplayName("Should call repository findById exactly once with correct arguments")
+            void shouldCallRepositoryFindById_exactlyOnce() {
                 // Arrange
                 UUID productId = UUID.randomUUID();
-                when(productRepository.findByIdAndIsActive(productId, true))
-                        .thenReturn(Optional.of(validProductResponse(productId)));
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(validProduct(productId)));
 
                 // Act
                 productService.getProduct(productId);
 
                 // Assert
-                verify(productRepository).findByIdAndIsActive(productId, true);
+                verify(productRepository).findById(productId);
             }
 
             @Test
@@ -507,12 +505,14 @@ class ProductServiceImplTest {
             void shouldReturnProduct_whenDescriptionIsNull() {
                 // Arrange
                 UUID productId = UUID.randomUUID();
-                ProductResponseDTO expectedResponse = new ProductResponseDTO(
-                        productId.toString(), VALID_TITLE, null, VALID_QUANTITY,
+                Product product = new Product(
+                        VALID_TITLE, null, VALID_QUANTITY,
                         VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
                 );
-                when(productRepository.findByIdAndIsActive(productId, true))
-                        .thenReturn(Optional.of(expectedResponse));
+                EntityTestUtil.setId(product, productId);
+
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
 
                 // Act
                 ProductResponseDTO response = productService.getProduct(productId);
@@ -534,7 +534,7 @@ class ProductServiceImplTest {
             void shouldThrowProductNotFoundException_whenProductDoesNotExist() {
                 // Arrange
                 UUID productId = UUID.randomUUID();
-                when(productRepository.findByIdAndIsActive(productId, true))
+                when(productRepository.findById(productId))
                         .thenReturn(Optional.empty());
 
                 // Act & Assert
@@ -543,7 +543,7 @@ class ProductServiceImplTest {
                         () -> productService.getProduct(productId)
                 );
                 assertEquals("Product not found", exception.getMessage());
-                verify(productRepository).findByIdAndIsActive(productId, true);
+                verify(productRepository).findById(productId);
             }
 
             @Test
@@ -551,8 +551,8 @@ class ProductServiceImplTest {
             void shouldNotCallRepositorySave_whenGettingProduct() {
                 // Arrange
                 UUID productId = UUID.randomUUID();
-                when(productRepository.findByIdAndIsActive(productId, true))
-                        .thenReturn(Optional.of(validProductResponse(productId)));
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(validProduct(productId)));
 
                 // Act
                 productService.getProduct(productId);
@@ -573,7 +573,7 @@ class ProductServiceImplTest {
             void shouldPropagateRuntimeException_whenRepositoryThrowsOnFind() {
                 // Arrange
                 UUID productId = UUID.randomUUID();
-                when(productRepository.findByIdAndIsActive(productId, true))
+                when(productRepository.findById(productId))
                         .thenThrow(new RuntimeException("Database connection lost"));
 
                 // Act & Assert
@@ -582,7 +582,7 @@ class ProductServiceImplTest {
                         () -> productService.getProduct(productId)
                 );
                 assertEquals("Database connection lost", exception.getMessage());
-                verify(productRepository).findByIdAndIsActive(productId, true);
+                verify(productRepository).findById(productId);
             }
 
             @Test
@@ -590,7 +590,7 @@ class ProductServiceImplTest {
             void shouldPropagateException_whenRepositoryFindFailsUnexpectedly() {
                 // Arrange — simulating an unexpected persistence-layer failure
                 UUID productId = UUID.randomUUID();
-                when(productRepository.findByIdAndIsActive(productId, true))
+                when(productRepository.findById(productId))
                         .thenThrow(new IllegalStateException("Unexpected persistence error"));
 
                 // Act & Assert
@@ -613,12 +613,14 @@ class ProductServiceImplTest {
             void shouldReturnProduct_whenQuantityIsZero() {
                 // Arrange
                 UUID productId = UUID.randomUUID();
-                ProductResponseDTO expectedResponse = new ProductResponseDTO(
-                        productId.toString(), VALID_TITLE, VALID_DESCRIPTION, 0,
+                Product product = new Product(
+                        VALID_TITLE, VALID_DESCRIPTION, 0,
                         VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
                 );
-                when(productRepository.findByIdAndIsActive(productId, true))
-                        .thenReturn(Optional.of(expectedResponse));
+                EntityTestUtil.setId(product, productId);
+
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
 
                 // Act
                 ProductResponseDTO response = productService.getProduct(productId);
@@ -633,12 +635,14 @@ class ProductServiceImplTest {
             void shouldReturnProduct_whenPriceIsZero() {
                 // Arrange
                 UUID productId = UUID.randomUUID();
-                ProductResponseDTO expectedResponse = new ProductResponseDTO(
-                        productId.toString(), VALID_TITLE, VALID_DESCRIPTION, VALID_QUANTITY,
+                Product product = new Product(
+                        VALID_TITLE, VALID_DESCRIPTION, VALID_QUANTITY,
                         0L, VALID_CURRENCY, VALID_IMAGE_URL
                 );
-                when(productRepository.findByIdAndIsActive(productId, true))
-                        .thenReturn(Optional.of(expectedResponse));
+                EntityTestUtil.setId(product, productId);
+
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
 
                 // Act
                 ProductResponseDTO response = productService.getProduct(productId);
@@ -653,12 +657,14 @@ class ProductServiceImplTest {
             void shouldReturnProduct_whenPriceIsMaxLong() {
                 // Arrange
                 UUID productId = UUID.randomUUID();
-                ProductResponseDTO expectedResponse = new ProductResponseDTO(
-                        productId.toString(), VALID_TITLE, VALID_DESCRIPTION, VALID_QUANTITY,
+                Product product = new Product(
+                        VALID_TITLE, VALID_DESCRIPTION, VALID_QUANTITY,
                         Long.MAX_VALUE, VALID_CURRENCY, VALID_IMAGE_URL
                 );
-                when(productRepository.findByIdAndIsActive(productId, true))
-                        .thenReturn(Optional.of(expectedResponse));
+                EntityTestUtil.setId(product, productId);
+
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
 
                 // Act
                 ProductResponseDTO response = productService.getProduct(productId);
@@ -675,12 +681,14 @@ class ProductServiceImplTest {
                 UUID productId = UUID.randomUUID();
                 String specialTitle = "Laptop™ — Pro Edition «2024»";
                 String specialDescription = "Features: résumé-ready display, naïve AI engine, 日本語サポート & more!";
-                ProductResponseDTO expectedResponse = new ProductResponseDTO(
-                        productId.toString(), specialTitle, specialDescription, VALID_QUANTITY,
+                Product product = new Product(
+                        specialTitle, specialDescription, VALID_QUANTITY,
                         VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
                 );
-                when(productRepository.findByIdAndIsActive(productId, true))
-                        .thenReturn(Optional.of(expectedResponse));
+                EntityTestUtil.setId(product, productId);
+
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
 
                 // Act
                 ProductResponseDTO response = productService.getProduct(productId);
@@ -697,12 +705,14 @@ class ProductServiceImplTest {
                 // Arrange
                 UUID productId = UUID.randomUUID();
                 String longDescription = "X".repeat(5000);
-                ProductResponseDTO expectedResponse = new ProductResponseDTO(
-                        productId.toString(), VALID_TITLE, longDescription, VALID_QUANTITY,
+                Product product = new Product(
+                        VALID_TITLE, longDescription, VALID_QUANTITY,
                         VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
                 );
-                when(productRepository.findByIdAndIsActive(productId, true))
-                        .thenReturn(Optional.of(expectedResponse));
+                EntityTestUtil.setId(product, productId);
+
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
 
                 // Act
                 ProductResponseDTO response = productService.getProduct(productId);
@@ -1218,7 +1228,7 @@ class ProductServiceImplTest {
             }
 
             @Test
-            @DisplayName("Should not call save or findByIdAndIsActive when getting products list")
+            @DisplayName("Should not call save or findById when getting products list")
             void shouldNotCallOtherRepositoryMethods_whenGettingProductsList() {
                 // Arrange
                 ProductFilterDTO filter = emptyFilter();
@@ -1234,7 +1244,7 @@ class ProductServiceImplTest {
 
                 // Assert
                 verify(productRepository, never()).save(any(Product.class));
-                verify(productRepository, never()).findByIdAndIsActive(any(), anyBoolean());
+                verify(productRepository, never()).findById(any());
             }
         }
     }

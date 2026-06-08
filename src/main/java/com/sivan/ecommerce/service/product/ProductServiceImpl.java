@@ -41,8 +41,13 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     public ProductResponseDTO getProduct(UUID productId) {
-        return productRepository.findByIdAndIsActive(productId, true)
+        Product product = productRepository.findById(productId)
                 .orElseThrow(() -> new ProductNotFoundException("Product not found"));
+
+        if (!product.isActive())
+            throw new ProductNotFoundException("Product not found");
+
+        return ProductMapper.mapProductToProductResponse(product);
     }
 
     @Override
