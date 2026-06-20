@@ -8,7 +8,7 @@ import jakarta.validation.constraints.Size;
 public record CustomerRequestDTO(@NotBlank @Size(min = 1, max = 100) String firstName,
                                  @NotBlank @Size(min = 1, max = 100) String lastName,
                                  @NotBlank @Email @Size(max = 255) String email,
-                                 @Nullable @Size(min = 2, max = 255) String location,
+                                 @Nullable @Size(min = 2, max = 512) String location,
                                  @NotBlank @Size(min = 12, max = 255) String password) {
 
     /*

@@ -392,11 +392,11 @@ class CustomerRestControllerTest {
             }
 
             @Test
-            @DisplayName("Should return 400 when location exceeds 255 characters")
+            @DisplayName("Should return 400 when location exceeds 512 characters")
             void shouldReturn400_whenLocationTooLong() throws Exception {
                 CustomerRequestDTO request = new CustomerRequestDTO(
                         VALID_FIRST_NAME, VALID_LAST_NAME, VALID_EMAIL,
-                        "L".repeat(256), VALID_PASSWORD
+                        "L".repeat(513), VALID_PASSWORD
                 );
 
                 mockMvc.perform(post(CUSTOMERS_URL)

@@ -21,7 +21,7 @@ public class Customer extends BaseEntity {
     @Column(name = "email", unique = true, nullable = false)
     private String email;
 
-    @Column(name = "location")
+    @Column(name = "location", length = 512)
     private String location;
 
     @Column(name = "password", nullable = false)
@@ -61,7 +61,7 @@ public class Customer extends BaseEntity {
             CascadeType.PERSIST,
             CascadeType.REFRESH
     })
-    private List<Order> orders = new ArrayList<>(); // TODO: Should I use List or Set here ?
+    private List<Order> orders = new ArrayList<>();
 
     public Customer() {
     }
