@@ -15,6 +15,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -41,13 +42,12 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     public ProductResponseDTO getProduct(UUID productId) {
-        Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new ProductNotFoundException("Product not found"));
+        Optional<Product> product = productRepository.findById(productId);
 
-        if (!product.isActive())
+        if (product.isEmpty() || !product.get().isActive())
             throw new ProductNotFoundException("Product not found");
 
-        return ProductMapper.mapProductToProductResponse(product);
+        return ProductMapper.mapProductToProductResponse(product.get());
     }
 
     @Override
