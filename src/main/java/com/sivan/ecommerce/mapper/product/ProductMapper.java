@@ -13,7 +13,7 @@ public class ProductMapper {
     public static Product mapProductRequestToProduct(ProductRequestDTO productRequestDTO) {
         return new Product(
                 productRequestDTO.title(),
-                productRequestDTO.description() != null ? productRequestDTO.description() : null,
+                productRequestDTO.description(),
                 productRequestDTO.quantity(),
                 productRequestDTO.price(),
                 productRequestDTO.currencyCode(),
