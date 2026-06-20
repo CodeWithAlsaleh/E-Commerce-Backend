@@ -36,10 +36,9 @@ public class CartItemServiceImpl implements CartItemService {
     @Override
     @Transactional
     public CartItemResponseDTO createCartItem(CartItemRequestDTO cartItemRequestDTO) {
-        Product product = productRepository.findById(cartItemRequestDTO.productId())
-                .orElseThrow(() -> new ProductNotFoundException("Product not found"));
+        Optional<Product> product = productRepository.findById(cartItemRequestDTO.productId());
 
-        if (!product.isActive())
+        if (product.isEmpty() || !product.get().isActive())
             throw new ProductNotFoundException("Product not found");
 
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
@@ -49,21 +48,21 @@ public class CartItemServiceImpl implements CartItemService {
 
         CartItem cartItem = new CartItem(0);
 
-        Optional<CartItem> curCartItem = cartItemRepository.findCartItem(product.getId(), customer.getCart().getId());
+        Optional<CartItem> curCartItem = cartItemRepository.findCartItem(product.get().getId(), customer.getCart().getId());
 
         if (curCartItem.isPresent())
             cartItem = curCartItem.get(); // Managed entity
         else {
             // Only link relationships if it's a brand-new entity
-            cartItem.setProduct(product);
+            cartItem.setProduct(product.get());
             customer.getCart().addCartItem(cartItem);
         }
 
         cartItem.setQuantity(cartItem.getQuantity() + cartItemRequestDTO.quantity());
 
-        if (cartItem.getQuantity() > product.getQuantity())
+        if (cartItem.getQuantity() > product.get().getQuantity())
             throw new InsufficientStockException("Requested quantity is not available in stock");
-        
+
         return CartItemMapper.mapCartItemToCartItemResponse(cartItemRepository.save(cartItem));
     }
 }
