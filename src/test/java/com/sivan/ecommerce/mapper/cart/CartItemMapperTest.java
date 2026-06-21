@@ -141,6 +141,8 @@ class CartItemMapperTest {
             assertNotNull(response);
             assertEquals(VALID_PRODUCT_ID, response.productId());
             assertEquals(VALID_PRODUCT_TITLE, response.productTitle());
+            assertEquals(7999L, response.price());
+            assertTrue(response.isActive());
             assertEquals(VALID_QUANTITY, response.quantity());
         }
 
@@ -164,6 +166,8 @@ class CartItemMapperTest {
             assertNotNull(response);
             assertNull(response.productId());
             assertEquals(VALID_PRODUCT_TITLE, response.productTitle());
+            assertEquals(1999L, response.price());
+            assertTrue(response.isActive());
         }
 
         @Test
@@ -183,6 +187,8 @@ class CartItemMapperTest {
             CartItemResponseDTO response = CartItemMapper.mapCartItemToCartItemResponse(cartItem);
 
             // Assert
+            assertEquals(4999L, response.price());
+            assertTrue(response.isActive());
             assertEquals(1, response.quantity());
         }
 
@@ -224,6 +230,78 @@ class CartItemMapperTest {
 
             // Assert
             assertEquals("ワイヤレスイヤホン", response.productTitle());
+        }
+
+        @Test
+        @DisplayName("Should map isActive as false when product is inactive and out of stock")
+        void shouldMapIsActiveFalse_whenProductIsInactiveAndOutOfStock() {
+            // Arrange
+            Product product = new Product(
+                    VALID_PRODUCT_TITLE, "Discontinued product", 0,
+                    2999L, "USD", "https://example.com/discontinued.png"
+            );
+            product.setActive(false);
+            EntityTestUtil.setId(product, VALID_PRODUCT_ID);
+
+            CartItem cartItem = new CartItem(VALID_QUANTITY);
+            cartItem.setProduct(product);
+
+            // Act
+            CartItemResponseDTO response = CartItemMapper.mapCartItemToCartItemResponse(cartItem);
+
+            // Assert
+            assertNotNull(response);
+            assertEquals(VALID_PRODUCT_ID, response.productId());
+            assertFalse(response.isActive());
+            assertEquals(2999L, response.price());
+        }
+
+        @Test
+        @DisplayName("Should map isActive as false when product is inactive but not out of stock")
+        void shouldMapIsActiveFalse_whenProductIsInActiveButNotOutOfStock() {
+            // Arrange
+            Product product = new Product(
+                    VALID_PRODUCT_TITLE, "Temporarily out of stock", 1,
+                    4999L, "USD", "https://example.com/outofstock.png"
+            );
+            product.setActive(false);
+            EntityTestUtil.setId(product, VALID_PRODUCT_ID);
+
+            CartItem cartItem = new CartItem(VALID_QUANTITY);
+            cartItem.setProduct(product);
+
+            // Act
+            CartItemResponseDTO response = CartItemMapper.mapCartItemToCartItemResponse(cartItem);
+
+            // Assert
+            assertNotNull(response);
+            assertEquals(VALID_PRODUCT_ID, response.productId());
+            assertFalse(response.isActive());
+            assertEquals(4999L, response.price());
+        }
+
+        @Test
+        @DisplayName("Should map isActive as false when product is active but out of stock")
+        void shouldMapIsActiveFalse_whenProductIsActiveButOutOfStock() {
+            // Arrange
+            Product product = new Product(
+                    VALID_PRODUCT_TITLE, "Temporarily out of stock", 0,
+                    4999L, "USD", "https://example.com/outofstock.png"
+            );
+            // product.isActive() defaults to true — only stock is zero
+            EntityTestUtil.setId(product, VALID_PRODUCT_ID);
+
+            CartItem cartItem = new CartItem(VALID_QUANTITY);
+            cartItem.setProduct(product);
+
+            // Act
+            CartItemResponseDTO response = CartItemMapper.mapCartItemToCartItemResponse(cartItem);
+
+            // Assert
+            assertNotNull(response);
+            assertEquals(VALID_PRODUCT_ID, response.productId());
+            assertFalse(response.isActive());
+            assertEquals(4999L, response.price());
         }
     }
 }
