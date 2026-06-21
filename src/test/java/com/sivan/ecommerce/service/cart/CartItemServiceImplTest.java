@@ -207,6 +207,8 @@ class CartItemServiceImplTest {
                 assertNotNull(response);
                 assertEquals(stub.productId(), response.productId());
                 assertEquals(VALID_PRODUCT_TITLE, response.productTitle());
+                assertEquals(7999L, response.price());
+                assertTrue(response.isActive());
                 assertEquals(VALID_REQUEST_QUANTITY, response.quantity());
             }
 
@@ -356,6 +358,8 @@ class CartItemServiceImplTest {
 
                 // Assert
                 assertNotNull(response);
+                assertEquals(7999L, response.price());
+                assertTrue(response.isActive());
                 assertEquals(expectedTotal, response.quantity());
             }
 
@@ -430,6 +434,8 @@ class CartItemServiceImplTest {
 
                 // Assert
                 assertNotNull(response);
+                assertEquals(7999L, response.price());
+                assertTrue(response.isActive());
                 assertEquals(stock, response.quantity());
             }
         }
@@ -860,6 +866,8 @@ class CartItemServiceImplTest {
                 // Assert — verify the mapper output matches what we expect
                 assertEquals(productId, response.productId());
                 assertEquals(VALID_PRODUCT_TITLE, response.productTitle());
+                assertEquals(7999L, response.price());
+                assertTrue(response.isActive());
                 assertEquals(VALID_REQUEST_QUANTITY, response.quantity());
             }
         }
@@ -900,6 +908,8 @@ class CartItemServiceImplTest {
 
                 // Assert
                 assertNotNull(response);
+                assertEquals(7999L, response.price());
+                assertTrue(response.isActive());
                 assertEquals(stock, response.quantity());
             }
 
@@ -931,6 +941,8 @@ class CartItemServiceImplTest {
 
                 // Assert
                 assertNotNull(response);
+                assertEquals(7999L, response.price());
+                assertTrue(response.isActive());
                 assertEquals(1, response.quantity());
             }
 
@@ -964,6 +976,8 @@ class CartItemServiceImplTest {
 
                 // Assert
                 assertNotNull(response);
+                assertEquals(7999L, response.price());
+                assertTrue(response.isActive());
                 assertEquals(1, response.quantity());
             }
 

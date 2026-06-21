@@ -58,6 +58,8 @@ class CartRestControllerTest {
     private static final UUID VALID_PRODUCT_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final int VALID_QUANTITY = 2;
     private static final String VALID_PRODUCT_TITLE = "Wireless Bluetooth Headphones";
+    private static final long VALID_PRICE = 7999L;
+    private static final boolean VALID_IS_ACTIVE = true;
 
     // ==================== createCartItem() ====================
     @Nested
@@ -71,7 +73,7 @@ class CartRestControllerTest {
         }
 
         private CartItemResponseDTO validResponse() {
-            return new CartItemResponseDTO(VALID_PRODUCT_ID, VALID_PRODUCT_TITLE, VALID_QUANTITY);
+            return new CartItemResponseDTO(VALID_PRODUCT_ID, VALID_PRODUCT_TITLE, VALID_PRICE, VALID_IS_ACTIVE, VALID_QUANTITY);
         }
 
         // ==================== SUCCESS CASES (201) ====================
@@ -95,6 +97,8 @@ class CartRestControllerTest {
                         .andExpect(status().isCreated())
                         .andExpect(jsonPath("$.productId").value(VALID_PRODUCT_ID.toString()))
                         .andExpect(jsonPath("$.productTitle").value(VALID_PRODUCT_TITLE))
+                        .andExpect(jsonPath("$.price").value(VALID_PRICE))
+                        .andExpect(jsonPath("$.isActive").value(VALID_IS_ACTIVE))
                         .andExpect(jsonPath("$.quantity").value(VALID_QUANTITY));
 
                 verify(cartItemService).createCartItem(any(CartItemRequestDTO.class));
@@ -125,7 +129,7 @@ class CartRestControllerTest {
             void shouldReturn201_whenQuantityIsExactlyOne() throws Exception {
                 // Arrange
                 CartItemRequestDTO request = new CartItemRequestDTO(VALID_PRODUCT_ID, 1);
-                CartItemResponseDTO response = new CartItemResponseDTO(VALID_PRODUCT_ID, VALID_PRODUCT_TITLE, 1);
+                CartItemResponseDTO response = new CartItemResponseDTO(VALID_PRODUCT_ID, VALID_PRODUCT_TITLE, VALID_PRICE, VALID_IS_ACTIVE, 1);
                 when(cartItemService.createCartItem(any(CartItemRequestDTO.class))).thenReturn(response);
 
                 // Act & Assert
@@ -503,6 +507,8 @@ class CartRestControllerTest {
                         .andExpect(status().isCreated())
                         .andExpect(jsonPath("$.productId").exists())
                         .andExpect(jsonPath("$.productTitle").exists())
+                        .andExpect(jsonPath("$.price").exists())
+                        .andExpect(jsonPath("$.isActive").exists())
                         .andExpect(jsonPath("$.quantity").exists());
             }
 
@@ -537,7 +543,7 @@ class CartRestControllerTest {
                 // Arrange
                 CartItemRequestDTO request = new CartItemRequestDTO(VALID_PRODUCT_ID, Integer.MAX_VALUE);
                 CartItemResponseDTO response = new CartItemResponseDTO(
-                        VALID_PRODUCT_ID, VALID_PRODUCT_TITLE, Integer.MAX_VALUE
+                        VALID_PRODUCT_ID, VALID_PRODUCT_TITLE, VALID_PRICE, VALID_IS_ACTIVE, Integer.MAX_VALUE
                 );
                 when(cartItemService.createCartItem(any(CartItemRequestDTO.class))).thenReturn(response);
 
