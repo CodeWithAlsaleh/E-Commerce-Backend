@@ -18,6 +18,8 @@ public class CartItemMapper {
         return new CartItemResponseDTO(
                 cartItem.getProduct().getId(),
                 cartItem.getProduct().getTitle(),
+                cartItem.getProduct().getPrice(),
+                cartItem.getProduct().isActive() && cartItem.getProduct().getQuantity() > 0,
                 cartItem.getQuantity()
         );
     }
