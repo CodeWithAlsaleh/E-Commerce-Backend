@@ -74,6 +74,7 @@ public class CartItemServiceImpl implements CartItemService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<CartItemResponseDTO> getCartItems() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
 

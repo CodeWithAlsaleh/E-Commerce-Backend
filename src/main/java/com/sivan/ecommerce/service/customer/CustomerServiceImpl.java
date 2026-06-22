@@ -61,6 +61,7 @@ public class CustomerServiceImpl implements CustomerService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public CustomerResponseDTO getProfile() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
 

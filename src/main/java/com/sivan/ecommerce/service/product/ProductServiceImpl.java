@@ -41,6 +41,7 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public ProductResponseDTO getProduct(UUID productId) {
         Optional<Product> product = productRepository.findById(productId);
 
@@ -51,6 +52,7 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Page<ProductResponseDTO> getProducts(ProductFilterDTO productFilterDTO, Pageable pageable) {
         if (productFilterDTO.minPrice() != null && productFilterDTO.maxPrice() != null && productFilterDTO.minPrice() > productFilterDTO.maxPrice())
             throw new InvalidDataException("Minimum price must be less than or equal to maximum price");
