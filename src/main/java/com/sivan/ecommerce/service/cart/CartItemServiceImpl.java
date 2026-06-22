@@ -50,7 +50,7 @@ public class CartItemServiceImpl implements CartItemService {
 
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
 
-        Customer customer = customerRepository.findByEmailWithCart(email)
+        Customer customer = customerRepository.findByEmailWithCart(email.toLowerCase())
                 .orElseThrow(() -> new CustomerNotFoundException("Profile not found"));
 
         CartItem cartItem = new CartItem(0);
@@ -78,7 +78,7 @@ public class CartItemServiceImpl implements CartItemService {
     public List<CartItemResponseDTO> getCartItems() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
 
-        Customer customer = customerRepository.findByEmailWithCart(email)
+        Customer customer = customerRepository.findByEmailWithCart(email.toLowerCase())
                 .orElseThrow(() -> new CustomerNotFoundException("Profile not found"));
 
         return cartItemRepository.findAllByCartIdWithProduct(customer.getCart().getId())
