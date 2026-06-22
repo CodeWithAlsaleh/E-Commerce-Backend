@@ -12,6 +12,7 @@ import org.springframework.web.bind.MissingPathVariableException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.stream.Collectors;
 
@@ -52,6 +53,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MissingPathVariableException.class)
     public ResponseEntity<ErrorResponse> handleException(MissingPathVariableException exception) {
         return buildError(HttpStatus.BAD_REQUEST, "The required 'path variable' is missing from the URL path");
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ErrorResponse> handleException(NoResourceFoundException exception) {
+        return buildError(HttpStatus.NOT_FOUND, "The requested API endpoint does not exist. Please verify the URL path and HTTP method.");
     }
 
     // ==================== Custom exceptions ====================
