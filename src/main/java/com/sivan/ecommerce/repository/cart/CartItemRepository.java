@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -17,4 +18,12 @@ public interface CartItemRepository extends JpaRepository<CartItem, UUID> {
             """)
     Optional<CartItem> findCartItem(@Param("productId") UUID productId,
                                     @Param("cartId") UUID cartId);
+
+    @Query("""
+             SELECT ct
+             FROM CartItem ct
+             JOIN FETCH ct.product p
+             WHERE ct.cart.id = :cartId
+            """)
+    List<CartItem> findAllByCartIdWithProduct(@Param("cartId") UUID cartId);
 }

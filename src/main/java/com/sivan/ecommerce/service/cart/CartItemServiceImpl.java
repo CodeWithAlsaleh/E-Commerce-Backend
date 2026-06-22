@@ -17,6 +17,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -36,6 +37,12 @@ public class CartItemServiceImpl implements CartItemService {
     @Override
     @Transactional
     public CartItemResponseDTO createCartItem(CartItemRequestDTO cartItemRequestDTO) {
+        /*
+         *  NOTE:
+         *      productRepository.findById() primes Hibernate's L1 Cache (Persistence Context) at the start
+         *      of this transaction. So when CartItemMapper later calls cartItem.getProduct().getTitle()
+         *      the lazy proxy resolves instantly from memory instead of firing an extra SQL network query.
+         * */
         Optional<Product> product = productRepository.findById(cartItemRequestDTO.productId());
 
         if (product.isEmpty() || !product.get().isActive())
@@ -64,5 +71,16 @@ public class CartItemServiceImpl implements CartItemService {
             throw new InsufficientStockException("Requested quantity is not available in stock");
 
         return CartItemMapper.mapCartItemToCartItemResponse(cartItemRepository.save(cartItem));
+    }
+
+    @Override
+    public List<CartItemResponseDTO> getCartItems() {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+
+        Customer customer = customerRepository.findByEmailWithCart(email)
+                .orElseThrow(() -> new CustomerNotFoundException("Profile not found"));
+
+        return cartItemRepository.findAllByCartIdWithProduct(customer.getCart().getId())
+                .stream().map(CartItemMapper::mapCartItemToCartItemResponse).toList();
     }
 }
