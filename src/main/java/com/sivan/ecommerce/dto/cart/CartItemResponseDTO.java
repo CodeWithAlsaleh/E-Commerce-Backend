@@ -5,6 +5,6 @@ import java.util.UUID;
 public record CartItemResponseDTO(UUID productId,
                                   String productTitle,
                                   long price,
-                                  boolean isActive,
+                                  boolean isAvailable,
                                   int quantity) {
 }

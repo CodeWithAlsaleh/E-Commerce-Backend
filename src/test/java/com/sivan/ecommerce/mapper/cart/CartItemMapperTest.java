@@ -142,7 +142,7 @@ class CartItemMapperTest {
             assertEquals(VALID_PRODUCT_ID, response.productId());
             assertEquals(VALID_PRODUCT_TITLE, response.productTitle());
             assertEquals(7999L, response.price());
-            assertTrue(response.isActive());
+            assertTrue(response.isAvailable());
             assertEquals(VALID_QUANTITY, response.quantity());
         }
 
@@ -167,7 +167,7 @@ class CartItemMapperTest {
             assertNull(response.productId());
             assertEquals(VALID_PRODUCT_TITLE, response.productTitle());
             assertEquals(1999L, response.price());
-            assertTrue(response.isActive());
+            assertTrue(response.isAvailable());
         }
 
         @Test
@@ -188,7 +188,7 @@ class CartItemMapperTest {
 
             // Assert
             assertEquals(4999L, response.price());
-            assertTrue(response.isActive());
+            assertTrue(response.isAvailable());
             assertEquals(1, response.quantity());
         }
 
@@ -252,7 +252,7 @@ class CartItemMapperTest {
             // Assert
             assertNotNull(response);
             assertEquals(VALID_PRODUCT_ID, response.productId());
-            assertFalse(response.isActive());
+            assertFalse(response.isAvailable());
             assertEquals(2999L, response.price());
         }
 
@@ -276,7 +276,7 @@ class CartItemMapperTest {
             // Assert
             assertNotNull(response);
             assertEquals(VALID_PRODUCT_ID, response.productId());
-            assertFalse(response.isActive());
+            assertFalse(response.isAvailable());
             assertEquals(4999L, response.price());
         }
 
@@ -300,7 +300,7 @@ class CartItemMapperTest {
             // Assert
             assertNotNull(response);
             assertEquals(VALID_PRODUCT_ID, response.productId());
-            assertFalse(response.isActive());
+            assertFalse(response.isAvailable());
             assertEquals(4999L, response.price());
         }
     }

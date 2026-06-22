@@ -209,7 +209,7 @@ class CartItemServiceImplTest {
                 assertEquals(stub.productId(), response.productId());
                 assertEquals(VALID_PRODUCT_TITLE, response.productTitle());
                 assertEquals(7999L, response.price());
-                assertTrue(response.isActive());
+                assertTrue(response.isAvailable());
                 assertEquals(VALID_REQUEST_QUANTITY, response.quantity());
             }
 
@@ -360,7 +360,7 @@ class CartItemServiceImplTest {
                 // Assert
                 assertNotNull(response);
                 assertEquals(7999L, response.price());
-                assertTrue(response.isActive());
+                assertTrue(response.isAvailable());
                 assertEquals(expectedTotal, response.quantity());
             }
 
@@ -436,7 +436,7 @@ class CartItemServiceImplTest {
                 // Assert
                 assertNotNull(response);
                 assertEquals(7999L, response.price());
-                assertTrue(response.isActive());
+                assertTrue(response.isAvailable());
                 assertEquals(stock, response.quantity());
             }
         }
@@ -868,7 +868,7 @@ class CartItemServiceImplTest {
                 assertEquals(productId, response.productId());
                 assertEquals(VALID_PRODUCT_TITLE, response.productTitle());
                 assertEquals(7999L, response.price());
-                assertTrue(response.isActive());
+                assertTrue(response.isAvailable());
                 assertEquals(VALID_REQUEST_QUANTITY, response.quantity());
             }
         }
@@ -910,7 +910,7 @@ class CartItemServiceImplTest {
                 // Assert
                 assertNotNull(response);
                 assertEquals(7999L, response.price());
-                assertTrue(response.isActive());
+                assertTrue(response.isAvailable());
                 assertEquals(stock, response.quantity());
             }
 
@@ -943,7 +943,7 @@ class CartItemServiceImplTest {
                 // Assert
                 assertNotNull(response);
                 assertEquals(7999L, response.price());
-                assertTrue(response.isActive());
+                assertTrue(response.isAvailable());
                 assertEquals(1, response.quantity());
             }
 
@@ -978,7 +978,7 @@ class CartItemServiceImplTest {
                 // Assert
                 assertNotNull(response);
                 assertEquals(7999L, response.price());
-                assertTrue(response.isActive());
+                assertTrue(response.isAvailable());
                 assertEquals(1, response.quantity());
             }
 
@@ -1122,7 +1122,7 @@ class CartItemServiceImplTest {
                 assertEquals(productId, result.getFirst().productId());
                 assertEquals(VALID_PRODUCT_TITLE, result.getFirst().productTitle());
                 assertEquals(7999L, result.getFirst().price());
-                assertTrue(result.getFirst().isActive());
+                assertTrue(result.getFirst().isAvailable());
                 assertEquals(VALID_REQUEST_QUANTITY, result.getFirst().quantity());
             }
 
@@ -1479,7 +1479,7 @@ class CartItemServiceImplTest {
                 assertEquals(productId, dto.productId());
                 assertEquals(VALID_PRODUCT_TITLE, dto.productTitle());
                 assertEquals(7999L, dto.price());
-                assertTrue(dto.isActive());
+                assertTrue(dto.isAvailable());
                 assertEquals(VALID_REQUEST_QUANTITY, dto.quantity());
             }
 
@@ -1507,7 +1507,7 @@ class CartItemServiceImplTest {
 
                 // Assert — CartItemMapper sets isActive = product.isActive() && product.getQuantity() > 0
                 assertEquals(1, result.size());
-                assertFalse(result.getFirst().isActive());
+                assertFalse(result.getFirst().isAvailable());
             }
 
             @Test
@@ -1533,7 +1533,7 @@ class CartItemServiceImplTest {
 
                 // Assert — CartItemMapper sets isActive = product.isActive() && product.getQuantity() > 0
                 assertEquals(1, result.size());
-                assertFalse(result.getFirst().isActive());
+                assertFalse(result.getFirst().isAvailable());
             }
         }
 
@@ -1577,9 +1577,9 @@ class CartItemServiceImplTest {
 
                 // Assert
                 assertEquals(3, result.size());
-                assertTrue(result.getFirst().isActive(), "Active product with stock should be isActive=true");
-                assertFalse(result.get(1).isActive(), "Inactive product should be isActive=false");
-                assertFalse(result.get(2).isActive(), "Out-of-stock product should be isActive=false");
+                assertTrue(result.getFirst().isAvailable(), "Active product with stock should be isActive=true");
+                assertFalse(result.get(1).isAvailable(), "Inactive product should be isActive=false");
+                assertFalse(result.get(2).isAvailable(), "Out-of-stock product should be isActive=false");
             }
 
             @Test
