@@ -62,7 +62,22 @@ public class CartItemServiceImpl implements CartItemService {
         else {
             // Only link relationships if it's a brand-new entity
             cartItem.setProduct(product.get());
-            customer.getCart().addCartItem(cartItem);
+
+            /*
+             *   NOTE:
+             *       Set the parent on the owning side (child) instead of adding to customer.getCart().getCartItems().
+             *       This prevents Hibernate from firing a hidden SELECT query to initialize the lazy collection in memory.
+             * */
+            cartItem.setCart(customer.getCart());
+
+            // REMOVED: customer.getCart().addCartItem(cartItem);
+
+            /*
+             *   Hibernate ONLY looks at the owning side to write to the database. Updating the Cart's
+             *   list in memory does absolutely nothing for the database insert. It is purely for your
+             *   Java memory. Since you immediately return the single CartItemResponseDTO and end the
+             *   transaction, you don't actually care about updating the Cart object in memory!
+             * */
         }
 
         cartItem.setQuantity(cartItem.getQuantity() + cartItemRequestDTO.quantity());
