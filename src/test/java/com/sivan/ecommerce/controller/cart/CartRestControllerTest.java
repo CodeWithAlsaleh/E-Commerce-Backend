@@ -19,11 +19,15 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 
+import static org.hamcrest.Matchers.hasSize;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -34,8 +38,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * <p>Uses {@code @WebMvcTest} to load only the web layer (controller + security + validation).
  * The {@link CartItemService} is mocked — no database or full Spring context involved.</p>
  *
- * <p>{@code POST /cart/items} requires {@code ROLE_USER} in SecurityConfig,
- * so authentication and authorization tests are included.</p>
+ * <p>{@code POST /cart/items} and {@code GET /cart} both require {@code ROLE_USER} in SecurityConfig,
+ * so authentication and authorization tests are included for both endpoints.</p>
  */
 @WebMvcTest(CartRestController.class)
 @Import(SecurityConfig.class)
@@ -54,6 +58,7 @@ class CartRestControllerTest {
     // ======================== Constants ========================
 
     private static final String CART_ITEMS_URL = "/cart/items";
+    private static final String CART_URL = "/cart";
 
     private static final UUID VALID_PRODUCT_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final int VALID_QUANTITY = 2;
@@ -98,7 +103,7 @@ class CartRestControllerTest {
                         .andExpect(jsonPath("$.productId").value(VALID_PRODUCT_ID.toString()))
                         .andExpect(jsonPath("$.productTitle").value(VALID_PRODUCT_TITLE))
                         .andExpect(jsonPath("$.price").value(VALID_PRICE))
-                        .andExpect(jsonPath("$.isActive").value(VALID_IS_ACTIVE))
+                        .andExpect(jsonPath("$.isAvailable").value(VALID_IS_ACTIVE))
                         .andExpect(jsonPath("$.quantity").value(VALID_QUANTITY));
 
                 verify(cartItemService).createCartItem(any(CartItemRequestDTO.class));
@@ -508,7 +513,7 @@ class CartRestControllerTest {
                         .andExpect(jsonPath("$.productId").exists())
                         .andExpect(jsonPath("$.productTitle").exists())
                         .andExpect(jsonPath("$.price").exists())
-                        .andExpect(jsonPath("$.isActive").exists())
+                        .andExpect(jsonPath("$.isAvailable").exists())
                         .andExpect(jsonPath("$.quantity").exists());
             }
 
@@ -576,6 +581,340 @@ class CartRestControllerTest {
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(jsonWithExtraFields))
                         .andExpect(status().isCreated());
+            }
+        }
+    }
+
+    // ==================== getCartItems() ====================
+    @Nested
+    @DisplayName("getCartItems()")
+    class GetCartItems {
+
+        // ======================== Helpers ========================
+
+        private static final UUID PRODUCT_ID_1 = UUID.fromString("11111111-1111-1111-1111-111111111111");
+        private static final UUID PRODUCT_ID_2 = UUID.fromString("22222222-2222-2222-2222-222222222222");
+
+        private CartItemResponseDTO sampleCartItem1() {
+            return new CartItemResponseDTO(PRODUCT_ID_1, "Wireless Bluetooth Headphones", 7999L, true, 2);
+        }
+
+        private CartItemResponseDTO sampleCartItem2() {
+            return new CartItemResponseDTO(PRODUCT_ID_2, "USB-C Charging Cable", 1299L, true, 5);
+        }
+
+        // ==================== SUCCESS CASES (200) ====================
+
+        @Nested
+        @DisplayName("Success cases — 200 OK")
+        class SuccessCases {
+
+            @Test
+            @DisplayName("Should return 200 and correct JSON array when authenticated USER requests cart items")
+            @WithMockUser(roles = "USER")
+            void shouldReturn200_whenAuthenticatedUserRequestsCartItems() throws Exception {
+                // Arrange
+                List<CartItemResponseDTO> cartItems = List.of(sampleCartItem1(), sampleCartItem2());
+                when(cartItemService.getCartItems()).thenReturn(cartItems);
+
+                // Act & Assert
+                mockMvc.perform(get(CART_URL))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$").isArray())
+                        .andExpect(jsonPath("$", hasSize(2)))
+                        .andExpect(jsonPath("$[0].productId").value(PRODUCT_ID_1.toString()))
+                        .andExpect(jsonPath("$[0].productTitle").value("Wireless Bluetooth Headphones"))
+                        .andExpect(jsonPath("$[0].price").value(7999))
+                        .andExpect(jsonPath("$[0].isAvailable").value(true))
+                        .andExpect(jsonPath("$[0].quantity").value(2))
+                        .andExpect(jsonPath("$[1].productId").value(PRODUCT_ID_2.toString()))
+                        .andExpect(jsonPath("$[1].productTitle").value("USB-C Charging Cable"))
+                        .andExpect(jsonPath("$[1].price").value(1299))
+                        .andExpect(jsonPath("$[1].isAvailable").value(true))
+                        .andExpect(jsonPath("$[1].quantity").value(5));
+
+                verify(cartItemService).getCartItems();
+            }
+
+            @Test
+            @DisplayName("Should return 200 and correct JSON array when authenticated ADMIN requests cart items")
+            @WithMockUser(roles = {"USER", "ADMIN"})
+            void shouldReturn200_whenAuthenticatedAdminRequestsCartItems() throws Exception {
+                // Arrange
+                List<CartItemResponseDTO> cartItems = List.of(sampleCartItem1(), sampleCartItem2());
+                when(cartItemService.getCartItems()).thenReturn(cartItems);
+
+                // Act & Assert
+                mockMvc.perform(get(CART_URL))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$").isArray())
+                        .andExpect(jsonPath("$", hasSize(2)))
+                        .andExpect(jsonPath("$[0].productId").value(PRODUCT_ID_1.toString()))
+                        .andExpect(jsonPath("$[0].productTitle").value("Wireless Bluetooth Headphones"))
+                        .andExpect(jsonPath("$[0].price").value(7999))
+                        .andExpect(jsonPath("$[0].isAvailable").value(true))
+                        .andExpect(jsonPath("$[0].quantity").value(2))
+                        .andExpect(jsonPath("$[1].productId").value(PRODUCT_ID_2.toString()))
+                        .andExpect(jsonPath("$[1].productTitle").value("USB-C Charging Cable"))
+                        .andExpect(jsonPath("$[1].price").value(1299))
+                        .andExpect(jsonPath("$[1].isAvailable").value(true))
+                        .andExpect(jsonPath("$[1].quantity").value(5));
+
+                verify(cartItemService).getCartItems();
+            }
+
+            @Test
+            @DisplayName("Should call cartItemService.getCartItems exactly once")
+            @WithMockUser(roles = "USER")
+            void shouldCallServiceExactlyOnce() throws Exception {
+                // Arrange
+                when(cartItemService.getCartItems()).thenReturn(List.of(sampleCartItem1()));
+
+                // Act
+                mockMvc.perform(get(CART_URL))
+                        .andExpect(status().isOk());
+
+                // Assert
+                verify(cartItemService).getCartItems();
+                verifyNoMoreInteractions(cartItemService);
+            }
+        }
+
+        // ==================== AUTHENTICATION FAILURES (401) ====================
+
+        @Nested
+        @DisplayName("Authentication failures — 401 Unauthorized")
+        class AuthenticationFailures {
+
+            @Test
+            @DisplayName("Should return 401 when no credentials are provided (anonymous)")
+            void shouldReturn401_whenNoCredentials() throws Exception {
+                mockMvc.perform(get(CART_URL))
+                        .andExpect(status().isUnauthorized());
+
+                verifyNoInteractions(cartItemService);
+            }
+
+            @Test
+            @DisplayName("Should return 401 when invalid credentials are provided")
+            void shouldReturn401_whenInvalidCredentials() throws Exception {
+                mockMvc.perform(get(CART_URL)
+                                .with(httpBasic("wrong@email.com", "WrongPassword1!")))
+                        .andExpect(status().isUnauthorized());
+
+                verifyNoInteractions(cartItemService);
+            }
+        }
+
+        // ==================== AUTHORIZATION FAILURES (403) ====================
+
+        @Nested
+        @DisplayName("Authorization failures — 403 Forbidden")
+        class AuthorizationFailures {
+
+            @Test
+            @DisplayName("Should return 403 when authenticated user has ROLE_FACILITY (not USER)")
+            @WithMockUser(roles = "FACILITY")
+            void shouldReturn403_whenRoleIsFacility() throws Exception {
+                mockMvc.perform(get(CART_URL))
+                        .andExpect(status().isForbidden());
+
+                verifyNoInteractions(cartItemService);
+            }
+
+            @Test
+            @DisplayName("Should return 403 when user has no roles at all")
+            @WithMockUser(roles = {})
+            void shouldReturn403_whenUserHasNoRoles() throws Exception {
+                mockMvc.perform(get(CART_URL))
+                        .andExpect(status().isForbidden());
+
+                verifyNoInteractions(cartItemService);
+            }
+        }
+
+        // ==================== NOT FOUND CASES (404) ====================
+
+        @Nested
+        @DisplayName("Not found cases — 404 Not Found")
+        class NotFoundCases {
+
+            @Test
+            @DisplayName("Should return 404 when authenticated user's profile is not found in database")
+            @WithMockUser(roles = "USER")
+            void shouldReturn404_whenCustomerNotFound() throws Exception {
+                // Arrange
+                when(cartItemService.getCartItems())
+                        .thenThrow(new CustomerNotFoundException("Profile not found"));
+
+                // Act & Assert
+                mockMvc.perform(get(CART_URL))
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.status").value(404))
+                        .andExpect(jsonPath("$.message").value("Profile not found"));
+            }
+        }
+
+        // ==================== SERVICE EXCEPTION HANDLING ====================
+
+        @Nested
+        @DisplayName("Service exception handling")
+        class ServiceExceptionHandling {
+
+            @Test
+            @DisplayName("Should return 500 when service throws an unexpected RuntimeException")
+            @WithMockUser(roles = "USER")
+            void shouldReturn500_whenServiceThrowsRuntimeException() throws Exception {
+                // Arrange
+                when(cartItemService.getCartItems())
+                        .thenThrow(new RuntimeException("Database connection lost"));
+
+                // Act & Assert
+                mockMvc.perform(get(CART_URL))
+                        .andExpect(status().isInternalServerError())
+                        .andExpect(jsonPath("$.status").value(500))
+                        .andExpect(jsonPath("$.message").value("An unexpected error occurred."));
+            }
+
+            @Test
+            @DisplayName("Should return 500 when service throws an unexpected IllegalStateException")
+            @WithMockUser(roles = "USER")
+            void shouldReturn500_whenServiceThrowsIllegalStateException() throws Exception {
+                // Arrange
+                when(cartItemService.getCartItems())
+                        .thenThrow(new IllegalStateException("Unexpected internal state"));
+
+                // Act & Assert
+                mockMvc.perform(get(CART_URL))
+                        .andExpect(status().isInternalServerError())
+                        .andExpect(jsonPath("$.status").value(500))
+                        .andExpect(jsonPath("$.message").value("An unexpected error occurred."));
+            }
+        }
+
+        // ==================== JSON RESPONSE STRUCTURE ====================
+
+        @Nested
+        @DisplayName("JSON response structure validation")
+        class JsonResponseStructure {
+
+            @Test
+            @DisplayName("Should return all expected fields for each item in the cart response array")
+            @WithMockUser(roles = "USER")
+            void shouldReturnAllFieldsForEachCartItem() throws Exception {
+                // Arrange
+                when(cartItemService.getCartItems()).thenReturn(List.of(sampleCartItem1()));
+
+                // Act & Assert
+                mockMvc.perform(get(CART_URL))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$[0].productId").exists())
+                        .andExpect(jsonPath("$[0].productTitle").exists())
+                        .andExpect(jsonPath("$[0].price").exists())
+                        .andExpect(jsonPath("$[0].isAvailable").exists())
+                        .andExpect(jsonPath("$[0].quantity").exists());
+            }
+
+            @Test
+            @DisplayName("Error response should contain status, message, and timeStamp fields")
+            @WithMockUser(roles = "USER")
+            void shouldReturnErrorResponseStructure() throws Exception {
+                // Arrange — trigger a not-found error
+                when(cartItemService.getCartItems())
+                        .thenThrow(new CustomerNotFoundException("Profile not found"));
+
+                // Act & Assert
+                mockMvc.perform(get(CART_URL))
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.status").value(404))
+                        .andExpect(jsonPath("$.message").isNotEmpty())
+                        .andExpect(jsonPath("$.timeStamp").isNumber());
+            }
+        }
+
+        // ==================== EDGE CASES ====================
+
+        @Nested
+        @DisplayName("Edge cases")
+        class EdgeCases {
+
+            @Test
+            @DisplayName("Should return 200 with an empty JSON array when cart has no items")
+            @WithMockUser(roles = "USER")
+            void shouldReturn200_whenCartIsEmpty() throws Exception {
+                // Arrange
+                when(cartItemService.getCartItems()).thenReturn(Collections.emptyList());
+
+                // Act & Assert
+                mockMvc.perform(get(CART_URL))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$").isArray())
+                        .andExpect(jsonPath("$", hasSize(0)));
+
+                verify(cartItemService).getCartItems();
+            }
+
+            @Test
+            @DisplayName("Should return 200 with a single item when cart has exactly one item")
+            @WithMockUser(roles = "USER")
+            void shouldReturn200_whenCartHasOneItem() throws Exception {
+                // Arrange
+                when(cartItemService.getCartItems()).thenReturn(List.of(sampleCartItem1()));
+
+                // Act & Assert
+                mockMvc.perform(get(CART_URL))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$").isArray())
+                        .andExpect(jsonPath("$", hasSize(1)))
+                        .andExpect(jsonPath("$[0].productId").value(PRODUCT_ID_1.toString()));
+            }
+
+            @Test
+            @DisplayName("Should return cart item with isAvailable false when product is deactivated")
+            @WithMockUser(roles = "USER")
+            void shouldReturnCartItem_whenProductIsInactive() throws Exception {
+                // Arrange — service may return items whose product was deactivated after being added
+                CartItemResponseDTO inactiveItem = new CartItemResponseDTO(
+                        PRODUCT_ID_1, "Discontinued Headphones", 4999L, false, 1
+                );
+                when(cartItemService.getCartItems()).thenReturn(List.of(inactiveItem));
+
+                // Act & Assert
+                mockMvc.perform(get(CART_URL))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$[0].isAvailable").value(false));
+            }
+
+            @Test
+            @DisplayName("Should return cart item with price zero when product is free")
+            @WithMockUser(roles = "USER")
+            void shouldReturnCartItem_whenPriceIsZero() throws Exception {
+                // Arrange
+                CartItemResponseDTO freeItem = new CartItemResponseDTO(
+                        PRODUCT_ID_1, "Free Sample Product", 0L, true, 1
+                );
+                when(cartItemService.getCartItems()).thenReturn(List.of(freeItem));
+
+                // Act & Assert
+                mockMvc.perform(get(CART_URL))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$[0].price").value(0));
+            }
+
+            @Test
+            @DisplayName("Should return cart item with large quantity (Integer.MAX_VALUE)")
+            @WithMockUser(roles = "USER")
+            void shouldReturnCartItem_whenQuantityIsVeryLarge() throws Exception {
+                // Arrange
+                CartItemResponseDTO largeQtyItem = new CartItemResponseDTO(
+                        PRODUCT_ID_1, "Bulk Item", 100L, true, Integer.MAX_VALUE
+                );
+                when(cartItemService.getCartItems()).thenReturn(List.of(largeQtyItem));
+
+                // Act & Assert
+                mockMvc.perform(get(CART_URL))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$[0].quantity").value(Integer.MAX_VALUE));
             }
         }
     }
