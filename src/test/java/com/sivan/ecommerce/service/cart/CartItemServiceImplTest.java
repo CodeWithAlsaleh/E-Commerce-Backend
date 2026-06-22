@@ -25,6 +25,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -1002,6 +1003,608 @@ class CartItemServiceImplTest {
                 // Act & Assert
                 assertThrows(InsufficientStockException.class,
                         () -> cartItemService.createCartItem(validRequest(productId)));
+            }
+        }
+    }
+
+    // ==================== getCartItems() ====================
+    @Nested
+    @DisplayName("getCartItems()")
+    class GetCartItems {
+
+        // ======================== Helper Methods ========================
+
+        /**
+         * Sets up a mocked {@link SecurityContext} so that
+         * {@code SecurityContextHolder.getContext().getAuthentication().getName()}
+         * returns the given email.
+         *
+         * <p><b>IMPORTANT:</b> Every test that calls this helper MUST clear
+         * the context afterward via {@link #clearSecurityContext()} to prevent
+         * test pollution across the suite.</p>
+         */
+        private void stubAuthenticatedUser(String email) {
+            Authentication authentication = mock(Authentication.class);
+            when(authentication.getName()).thenReturn(email);
+
+            SecurityContext securityContext = mock(SecurityContext.class);
+            when(securityContext.getAuthentication()).thenReturn(authentication);
+
+            SecurityContextHolder.setContext(securityContext);
+        }
+
+        /**
+         * Clears the {@link SecurityContextHolder} to avoid leaking state
+         * between tests (static thread-local pollution).
+         */
+        @AfterEach
+        void clearSecurityContext() {
+            SecurityContextHolder.clearContext();
+        }
+
+        /**
+         * Creates an active {@link Product} with an ID assigned via reflection,
+         * mimicking Hibernate's @UuidGenerator behavior on persist.
+         */
+        private Product buildActiveProduct(UUID id, String title, long price, int stock) {
+            Product product = new Product(
+                    title, "A great product",
+                    stock, price, "USD",
+                    "https://example.com/images/product.png"
+            );
+            product.setActive(true);
+            EntityTestUtil.setId(product, id);
+
+            return product;
+        }
+
+        /**
+         * Creates a {@link Customer} with a {@link Cart} already assigned,
+         * and both have IDs set via reflection.
+         */
+        private Customer buildCustomerWithCart(UUID customerId, UUID cartId) {
+            Customer customer = new Customer(
+                    "John", "Doe", VALID_EMAIL,
+                    "New York, USA", "$2a$10$encodedPasswordHash"
+            );
+            EntityTestUtil.setId(customer, customerId);
+
+            Cart cart = new Cart();
+            EntityTestUtil.setId(cart, cartId);
+            customer.setCart(cart);
+
+            return customer;
+        }
+
+        /**
+         * Creates a saved {@link CartItem} with product and cart relationships
+         * and an ID assigned via reflection.
+         */
+        private CartItem buildSavedCartItem(UUID cartItemId, Product product, Cart cart, int quantity) {
+            CartItem cartItem = new CartItem(quantity);
+            cartItem.setProduct(product);
+            cartItem.setCart(cart);
+            EntityTestUtil.setId(cartItem, cartItemId);
+
+            return cartItem;
+        }
+
+        // ==================== getCartItems() — SUCCESS CASES ====================
+
+        @Nested
+        @DisplayName("getCartItems() — Success cases")
+        class GetCartItemsSuccess {
+
+            @Test
+            @DisplayName("Should return a list with one CartItemResponseDTO when cart has a single item")
+            void shouldReturnSingleItem_whenCartHasOneItem() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+                UUID productId = UUID.randomUUID();
+                UUID cartItemId = UUID.randomUUID();
+
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+                Product product = buildActiveProduct(productId, VALID_PRODUCT_TITLE, 7999L, VALID_PRODUCT_STOCK);
+                CartItem cartItem = buildSavedCartItem(cartItemId, product, customer.getCart(), VALID_REQUEST_QUANTITY);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findAllByCartIdWithProduct(cartId)).thenReturn(List.of(cartItem));
+
+                // Act
+                List<CartItemResponseDTO> result = cartItemService.getCartItems();
+
+                // Assert
+                assertNotNull(result);
+                assertEquals(1, result.size());
+                assertEquals(productId, result.getFirst().productId());
+                assertEquals(VALID_PRODUCT_TITLE, result.getFirst().productTitle());
+                assertEquals(7999L, result.getFirst().price());
+                assertTrue(result.getFirst().isActive());
+                assertEquals(VALID_REQUEST_QUANTITY, result.getFirst().quantity());
+            }
+
+            @Test
+            @DisplayName("Should return a list with multiple CartItemResponseDTOs when cart has several items")
+            void shouldReturnMultipleItems_whenCartHasSeveralItems() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+
+                UUID productId1 = UUID.randomUUID();
+                Product product1 = buildActiveProduct(productId1, "Wireless Bluetooth Headphones", 7999L, 50);
+                CartItem cartItem1 = buildSavedCartItem(UUID.randomUUID(), product1, customer.getCart(), 2);
+
+                UUID productId2 = UUID.randomUUID();
+                Product product2 = buildActiveProduct(productId2, "USB-C Charging Cable", 1299L, 100);
+                CartItem cartItem2 = buildSavedCartItem(UUID.randomUUID(), product2, customer.getCart(), 5);
+
+                UUID productId3 = UUID.randomUUID();
+                Product product3 = buildActiveProduct(productId3, "Laptop Stand", 4599L, 30);
+                CartItem cartItem3 = buildSavedCartItem(UUID.randomUUID(), product3, customer.getCart(), 1);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findAllByCartIdWithProduct(cartId))
+                        .thenReturn(List.of(cartItem1, cartItem2, cartItem3));
+
+                // Act
+                List<CartItemResponseDTO> result = cartItemService.getCartItems();
+
+                // Assert
+                assertNotNull(result);
+                assertEquals(3, result.size());
+
+                assertEquals(productId1, result.getFirst().productId());
+                assertEquals("Wireless Bluetooth Headphones", result.getFirst().productTitle());
+                assertEquals(7999L, result.getFirst().price());
+                assertEquals(2, result.getFirst().quantity());
+
+                assertEquals(productId2, result.get(1).productId());
+                assertEquals("USB-C Charging Cable", result.get(1).productTitle());
+                assertEquals(1299L, result.get(1).price());
+                assertEquals(5, result.get(1).quantity());
+
+                assertEquals(productId3, result.get(2).productId());
+                assertEquals("Laptop Stand", result.get(2).productTitle());
+                assertEquals(4599L, result.get(2).price());
+                assertEquals(1, result.get(2).quantity());
+            }
+
+            @Test
+            @DisplayName("Should return an empty list when cart has no items")
+            void shouldReturnEmptyList_whenCartHasNoItems() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findAllByCartIdWithProduct(cartId)).thenReturn(List.of());
+
+                // Act
+                List<CartItemResponseDTO> result = cartItemService.getCartItems();
+
+                // Assert
+                assertNotNull(result);
+                assertTrue(result.isEmpty());
+            }
+
+            @Test
+            @DisplayName("Should call customerRepository.findByEmailWithCart and cartItemRepository.findAllByCartIdWithProduct exactly once")
+            void shouldCallRepositoriesExactlyOnce() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findAllByCartIdWithProduct(cartId)).thenReturn(List.of());
+
+                // Act
+                cartItemService.getCartItems();
+
+                // Assert
+                verify(customerRepository).findByEmailWithCart(VALID_EMAIL);
+                verifyNoMoreInteractions(customerRepository);
+
+                verify(cartItemRepository).findAllByCartIdWithProduct(cartId);
+                verifyNoMoreInteractions(cartItemRepository);
+            }
+
+            @Test
+            @DisplayName("Should not interact with productRepository at all")
+            void shouldNotInteractWithProductRepository() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findAllByCartIdWithProduct(cartId)).thenReturn(List.of());
+
+                // Act
+                cartItemService.getCartItems();
+
+                // Assert
+                verifyNoInteractions(productRepository);
+            }
+
+            @Test
+            @DisplayName("Should verify the execution order: findCustomer → findAllByCartIdWithProduct")
+            void shouldVerifyExecutionOrder() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findAllByCartIdWithProduct(cartId)).thenReturn(List.of());
+
+                // Act
+                cartItemService.getCartItems();
+
+                // Assert — verify the order of repository interactions
+                var inOrder = inOrder(customerRepository, cartItemRepository);
+                inOrder.verify(customerRepository).findByEmailWithCart(VALID_EMAIL);
+                inOrder.verify(cartItemRepository).findAllByCartIdWithProduct(cartId);
+            }
+        }
+
+        // ==================== getCartItems() — NOT FOUND CASES (customer) ====================
+
+        @Nested
+        @DisplayName("getCartItems() — Customer not found cases")
+        class GetCartItemsCustomerNotFound {
+
+            @Test
+            @DisplayName("Should throw CustomerNotFoundException when customer profile not found")
+            void shouldThrowCustomerNotFoundException_whenCustomerNotFound() {
+                // Arrange
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.empty());
+
+                // Act & Assert
+                CustomerNotFoundException exception = assertThrows(
+                        CustomerNotFoundException.class,
+                        () -> cartItemService.getCartItems()
+                );
+                assertEquals("Profile not found", exception.getMessage());
+            }
+
+            @Test
+            @DisplayName("Should not interact with cartItemRepository when customer not found")
+            void shouldNotInteractWithCartItemRepo_whenCustomerNotFound() {
+                // Arrange
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.empty());
+
+                // Act
+                assertThrows(CustomerNotFoundException.class,
+                        () -> cartItemService.getCartItems());
+
+                // Assert
+                verify(customerRepository).findByEmailWithCart(VALID_EMAIL);
+                verifyNoInteractions(cartItemRepository);
+            }
+
+            @Test
+            @DisplayName("Should not interact with productRepository when customer not found")
+            void shouldNotInteractWithProductRepo_whenCustomerNotFound() {
+                // Arrange
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.empty());
+
+                // Act
+                assertThrows(CustomerNotFoundException.class,
+                        () -> cartItemService.getCartItems());
+
+                // Assert
+                verifyNoInteractions(productRepository);
+            }
+        }
+
+        // ==================== getCartItems() — SECURITY CONTEXT FAILURES ====================
+
+        @Nested
+        @DisplayName("getCartItems() — Security context failures")
+        class GetCartItemsSecurityContextFailures {
+
+            @Test
+            @DisplayName("Should throw NullPointerException when SecurityContext has no Authentication")
+            void shouldThrowNPE_whenAuthenticationIsNull() {
+                // Arrange — no authentication present
+                SecurityContext securityContext = mock(SecurityContext.class);
+                when(securityContext.getAuthentication()).thenReturn(null);
+                SecurityContextHolder.setContext(securityContext);
+
+                // Act & Assert — calling getName() on null Authentication throws NPE
+                assertThrows(NullPointerException.class,
+                        () -> cartItemService.getCartItems());
+
+                // Verify no repositories are called
+                verifyNoInteractions(customerRepository);
+                verifyNoInteractions(cartItemRepository);
+                verifyNoInteractions(productRepository);
+            }
+        }
+
+        // ==================== getCartItems() — SERVER FAILURE CASES ====================
+
+        @Nested
+        @DisplayName("getCartItems() — Server failure simulation")
+        class GetCartItemsServerFailures {
+
+            @Test
+            @DisplayName("Should propagate RuntimeException when customerRepository.findByEmailWithCart throws")
+            void shouldPropagateException_whenCustomerRepositoryThrows() {
+                // Arrange
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL))
+                        .thenThrow(new RuntimeException("Database connection lost"));
+
+                // Act & Assert
+                RuntimeException exception = assertThrows(
+                        RuntimeException.class,
+                        () -> cartItemService.getCartItems()
+                );
+                assertEquals("Database connection lost", exception.getMessage());
+
+                verifyNoInteractions(cartItemRepository);
+            }
+
+            @Test
+            @DisplayName("Should propagate RuntimeException when cartItemRepository.findAllByCartIdWithProduct throws")
+            void shouldPropagateException_whenCartItemRepositoryThrows() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findAllByCartIdWithProduct(cartId))
+                        .thenThrow(new RuntimeException("Database unavailable"));
+
+                // Act & Assert
+                RuntimeException exception = assertThrows(
+                        RuntimeException.class,
+                        () -> cartItemService.getCartItems()
+                );
+                assertEquals("Database unavailable", exception.getMessage());
+            }
+
+            @Test
+            @DisplayName("Should propagate IllegalStateException when customerRepository.findByEmailWithCart throws")
+            void shouldPropagateIllegalStateException_whenCustomerRepositoryThrows() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+
+                buildCustomerWithCart(customerId, cartId);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL))
+                        .thenThrow(new IllegalStateException("Persistence failure"));
+
+                // Act & Assert
+                IllegalStateException exception = assertThrows(
+                        IllegalStateException.class,
+                        () -> cartItemService.getCartItems()
+                );
+                assertEquals("Persistence failure", exception.getMessage());
+                verifyNoInteractions(cartItemRepository);
+            }
+
+            @Test
+            @DisplayName("Should propagate IllegalStateException when cartItemRepository.findAllByCartIdWithProduct throws")
+            void shouldPropagateIllegalStateException_whenCartItemRepositoryThrows() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findAllByCartIdWithProduct(cartId))
+                        .thenThrow(new IllegalStateException("Persistence failure"));
+
+                // Act & Assert
+                IllegalStateException exception = assertThrows(
+                        IllegalStateException.class,
+                        () -> cartItemService.getCartItems()
+                );
+                assertEquals("Persistence failure", exception.getMessage());
+            }
+        }
+
+        // ==================== getCartItems() — MAPPER INTERACTION ====================
+
+        @Nested
+        @DisplayName("getCartItems() — Mapper interaction verification")
+        class GetCartItemsMapperVerification {
+
+            @Test
+            @DisplayName("Should correctly map CartItem fields through CartItemMapper for each item")
+            void shouldCorrectlyMapCartItemFieldsThroughMapper() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+                UUID productId = UUID.randomUUID();
+                UUID cartItemId = UUID.randomUUID();
+
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+                Product product = buildActiveProduct(productId, VALID_PRODUCT_TITLE, 7999L, VALID_PRODUCT_STOCK);
+                CartItem cartItem = buildSavedCartItem(cartItemId, product, customer.getCart(), VALID_REQUEST_QUANTITY);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findAllByCartIdWithProduct(cartId)).thenReturn(List.of(cartItem));
+
+                // Act
+                List<CartItemResponseDTO> result = cartItemService.getCartItems();
+
+                // Assert — verify the mapper output matches what we expect
+                assertEquals(1, result.size());
+
+                CartItemResponseDTO dto = result.getFirst();
+
+                assertEquals(productId, dto.productId());
+                assertEquals(VALID_PRODUCT_TITLE, dto.productTitle());
+                assertEquals(7999L, dto.price());
+                assertTrue(dto.isActive());
+                assertEquals(VALID_REQUEST_QUANTITY, dto.quantity());
+            }
+
+            @Test
+            @DisplayName("Should set isActive to false when product is inactive")
+            void shouldSetIsActiveToFalse_whenProductIsInactive() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+                UUID productId = UUID.randomUUID();
+                UUID cartItemId = UUID.randomUUID();
+
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+                Product product = buildActiveProduct(productId, VALID_PRODUCT_TITLE, 7999L, VALID_PRODUCT_STOCK);
+                product.setActive(false); // Product is inactive
+                CartItem cartItem = buildSavedCartItem(cartItemId, product, customer.getCart(), VALID_REQUEST_QUANTITY);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findAllByCartIdWithProduct(cartId)).thenReturn(List.of(cartItem));
+
+                // Act
+                List<CartItemResponseDTO> result = cartItemService.getCartItems();
+
+                // Assert — CartItemMapper sets isActive = product.isActive() && product.getQuantity() > 0
+                assertEquals(1, result.size());
+                assertFalse(result.getFirst().isActive());
+            }
+
+            @Test
+            @DisplayName("Should set isActive to false when product has zero stock")
+            void shouldSetIsActiveToFalse_whenProductHasZeroStock() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+                UUID productId = UUID.randomUUID();
+                UUID cartItemId = UUID.randomUUID();
+
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+                Product product = buildActiveProduct(productId, VALID_PRODUCT_TITLE, 7999L, 0); // Zero stock
+                CartItem cartItem = buildSavedCartItem(cartItemId, product, customer.getCart(), VALID_REQUEST_QUANTITY);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findAllByCartIdWithProduct(cartId)).thenReturn(List.of(cartItem));
+
+                // Act
+                List<CartItemResponseDTO> result = cartItemService.getCartItems();
+
+                // Assert — CartItemMapper sets isActive = product.isActive() && product.getQuantity() > 0
+                assertEquals(1, result.size());
+                assertFalse(result.getFirst().isActive());
+            }
+        }
+
+        // ==================== getCartItems() — EDGE CASES ====================
+
+        @Nested
+        @DisplayName("getCartItems() — Edge cases")
+        class GetCartItemsEdgeCases {
+
+            @Test
+            @DisplayName("Should return items with correct isActive flag for a mix of active and inactive products")
+            void shouldReturnCorrectIsActiveFlags_forMixedProducts() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+
+                UUID productId1 = UUID.randomUUID();
+                Product activeProduct = buildActiveProduct(productId1, "Active Product", 5999L, 10);
+
+                UUID productId2 = UUID.randomUUID();
+                Product inactiveProduct = buildActiveProduct(productId2, "Inactive Product", 3999L, 5);
+                inactiveProduct.setActive(false);
+
+                UUID productId3 = UUID.randomUUID();
+                Product outOfStockProduct = buildActiveProduct(productId3, "Out of Stock Product", 9999L, 0);
+
+                CartItem cartItem1 = buildSavedCartItem(UUID.randomUUID(), activeProduct, customer.getCart(), 1);
+                CartItem cartItem2 = buildSavedCartItem(UUID.randomUUID(), inactiveProduct, customer.getCart(), 2);
+                CartItem cartItem3 = buildSavedCartItem(UUID.randomUUID(), outOfStockProduct, customer.getCart(), 3);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findAllByCartIdWithProduct(cartId))
+                        .thenReturn(List.of(cartItem1, cartItem2, cartItem3));
+
+                // Act
+                List<CartItemResponseDTO> result = cartItemService.getCartItems();
+
+                // Assert
+                assertEquals(3, result.size());
+                assertTrue(result.getFirst().isActive(), "Active product with stock should be isActive=true");
+                assertFalse(result.get(1).isActive(), "Inactive product should be isActive=false");
+                assertFalse(result.get(2).isActive(), "Out-of-stock product should be isActive=false");
+            }
+
+            @Test
+            @DisplayName("Should return correct result when cart has exactly one item with quantity of 1")
+            void shouldReturnCorrectResult_whenCartHasSingleItemWithQuantityOne() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+                UUID productId = UUID.randomUUID();
+
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+                Product product = buildActiveProduct(productId, VALID_PRODUCT_TITLE, 7999L, VALID_PRODUCT_STOCK);
+                CartItem cartItem = buildSavedCartItem(UUID.randomUUID(), product, customer.getCart(), 1);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findAllByCartIdWithProduct(cartId)).thenReturn(List.of(cartItem));
+
+                // Act
+                List<CartItemResponseDTO> result = cartItemService.getCartItems();
+
+                // Assert
+                assertEquals(1, result.size());
+                assertEquals(1, result.getFirst().quantity());
             }
         }
     }
