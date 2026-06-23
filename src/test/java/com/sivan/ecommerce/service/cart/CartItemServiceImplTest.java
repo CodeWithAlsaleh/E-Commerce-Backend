@@ -2,11 +2,13 @@ package com.sivan.ecommerce.service.cart;
 
 import com.sivan.ecommerce.dto.cart.CartItemRequestDTO;
 import com.sivan.ecommerce.dto.cart.CartItemResponseDTO;
+import com.sivan.ecommerce.dto.cart.CartItemUpdateDTO;
 import com.sivan.ecommerce.entity.EntityTestUtil;
 import com.sivan.ecommerce.entity.cart.Cart;
 import com.sivan.ecommerce.entity.cart.CartItem;
 import com.sivan.ecommerce.entity.customer.Customer;
 import com.sivan.ecommerce.entity.product.Product;
+import com.sivan.ecommerce.exception.CartItemNotFoundException;
 import com.sivan.ecommerce.exception.CustomerNotFoundException;
 import com.sivan.ecommerce.exception.InsufficientStockException;
 import com.sivan.ecommerce.exception.ProductNotFoundException;
@@ -61,132 +63,132 @@ class CartItemServiceImplTest {
     private static final int VALID_PRODUCT_STOCK = 50;
     private static final int VALID_REQUEST_QUANTITY = 3;
 
+    // ======================== Helper Methods ========================
+
+    /**
+     * Sets up a mocked {@link SecurityContext} so that
+     * {@code SecurityContextHolder.getContext().getAuthentication().getName()}
+     * returns the given email.
+     *
+     * <p><b>IMPORTANT:</b> Every test that calls this helper MUST clear
+     * the context afterward via {@link #clearSecurityContext()} to prevent
+     * test pollution across the suite.</p>
+     */
+    private void stubAuthenticatedUser(String email) {
+        Authentication authentication = mock(Authentication.class);
+        when(authentication.getName()).thenReturn(email);
+
+        SecurityContext securityContext = mock(SecurityContext.class);
+        when(securityContext.getAuthentication()).thenReturn(authentication);
+
+        SecurityContextHolder.setContext(securityContext);
+    }
+
+    /**
+     * Clears the {@link SecurityContextHolder} to avoid leaking state
+     * between tests (static thread-local pollution).
+     */
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
+
+    /**
+     * Creates an active {@link Product} with an ID assigned via reflection,
+     * mimicking Hibernate's @UuidGenerator behavior on persist.
+     */
+    private Product buildActiveProduct(UUID id, int stock) {
+        Product product = new Product(
+                VALID_PRODUCT_TITLE, "A great product",
+                stock, 7999L, "USD",
+                "https://example.com/images/product.png"
+        );
+        product.setActive(true);
+        EntityTestUtil.setId(product, id);
+
+        return product;
+    }
+
+    /**
+     * Creates a {@link Customer} with a {@link Cart} already assigned,
+     * and both have IDs set via reflection.
+     */
+    private Customer buildCustomerWithCart(UUID customerId, UUID cartId) {
+        Customer customer = new Customer(
+                "John", "Doe", VALID_EMAIL,
+                "New York, USA", "$2a$10$encodedPasswordHash"
+        );
+        EntityTestUtil.setId(customer, customerId);
+
+        Cart cart = new Cart();
+        EntityTestUtil.setId(cart, cartId);
+        customer.setCart(cart);
+
+        return customer;
+    }
+
+    /**
+     * Creates a saved {@link CartItem} with product and cart relationships
+     * and an ID assigned via reflection.
+     */
+    private CartItem buildSavedCartItem(UUID cartItemId, Product product, Cart cart, int quantity) {
+        CartItem cartItem = new CartItem(quantity);
+        cartItem.setProduct(product);
+        cartItem.setCart(cart);
+        EntityTestUtil.setId(cartItem, cartItemId);
+
+        return cartItem;
+    }
+
+    /**
+     * Builds a valid {@link CartItemRequestDTO} with all fields populated.
+     */
+    private CartItemRequestDTO validRequest(UUID productId) {
+        return new CartItemRequestDTO(productId, VALID_REQUEST_QUANTITY);
+    }
+
+    /**
+     * Sets up the common mocking for a successful createCartItem() flow
+     * where the cart item does NOT already exist (brand-new item):
+     * - product exists and is active
+     * - authenticated user email is stubbed
+     * - customer with cart is found
+     * - no existing cart item for the product
+     * - repository.save() returns the saved cart item
+     */
+    private StubResult stubCreateNewCartItemSuccess(int requestQuantity) {
+        UUID productId = UUID.randomUUID();
+        UUID customerId = UUID.randomUUID();
+        UUID cartId = UUID.randomUUID();
+        UUID cartItemId = UUID.randomUUID();
+
+        Product product = buildActiveProduct(productId, VALID_PRODUCT_STOCK);
+        Customer customer = buildCustomerWithCart(customerId, cartId);
+
+        stubAuthenticatedUser(VALID_EMAIL);
+
+        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+        when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+        when(cartItemRepository.findCartItem(productId, cartId)).thenReturn(Optional.empty());
+
+        CartItem savedCartItem = buildSavedCartItem(cartItemId, product, customer.getCart(), requestQuantity);
+        when(cartItemRepository.save(any(CartItem.class))).thenReturn(savedCartItem);
+
+        return new StubResult(productId, customerId, cartId, cartItemId, product, customer);
+    }
+
+    /**
+     * Holds references to entities created during test setup,
+     * so tests can assert against them without re-querying.
+     */
+    private record StubResult(UUID productId, UUID customerId, UUID cartId,
+                              UUID cartItemId, Product product, Customer customer) {
+    }
+
     // ==================== createCartItem() ====================
     @Nested
     @DisplayName("createCartItem()")
     class CreateCartItem {
-
-        // ======================== Helper Methods ========================
-
-        /**
-         * Sets up a mocked {@link SecurityContext} so that
-         * {@code SecurityContextHolder.getContext().getAuthentication().getName()}
-         * returns the given email.
-         *
-         * <p><b>IMPORTANT:</b> Every test that calls this helper MUST clear
-         * the context afterward via {@link #clearSecurityContext()} to prevent
-         * test pollution across the suite.</p>
-         */
-        private void stubAuthenticatedUser(String email) {
-            Authentication authentication = mock(Authentication.class);
-            when(authentication.getName()).thenReturn(email);
-
-            SecurityContext securityContext = mock(SecurityContext.class);
-            when(securityContext.getAuthentication()).thenReturn(authentication);
-
-            SecurityContextHolder.setContext(securityContext);
-        }
-
-        /**
-         * Clears the {@link SecurityContextHolder} to avoid leaking state
-         * between tests (static thread-local pollution).
-         */
-        @AfterEach
-        void clearSecurityContext() {
-            SecurityContextHolder.clearContext();
-        }
-
-        /**
-         * Builds a valid {@link CartItemRequestDTO} with all fields populated.
-         */
-        private CartItemRequestDTO validRequest(UUID productId) {
-            return new CartItemRequestDTO(productId, VALID_REQUEST_QUANTITY);
-        }
-
-        /**
-         * Creates an active {@link Product} with an ID assigned via reflection,
-         * mimicking Hibernate's @UuidGenerator behavior on persist.
-         */
-        private Product buildActiveProduct(UUID id, int stock) {
-            Product product = new Product(
-                    VALID_PRODUCT_TITLE, "A great product",
-                    stock, 7999L, "USD",
-                    "https://example.com/images/product.png"
-            );
-            product.setActive(true);
-            EntityTestUtil.setId(product, id);
-
-            return product;
-        }
-
-        /**
-         * Creates a {@link Customer} with a {@link Cart} already assigned,
-         * and both have IDs set via reflection.
-         */
-        private Customer buildCustomerWithCart(UUID customerId, UUID cartId) {
-            Customer customer = new Customer(
-                    "John", "Doe", VALID_EMAIL,
-                    "New York, USA", "$2a$10$encodedPasswordHash"
-            );
-            EntityTestUtil.setId(customer, customerId);
-
-            Cart cart = new Cart();
-            EntityTestUtil.setId(cart, cartId);
-            customer.setCart(cart);
-
-            return customer;
-        }
-
-        /**
-         * Creates a saved {@link CartItem} with product and cart relationships
-         * and an ID assigned via reflection.
-         */
-        private CartItem buildSavedCartItem(UUID cartItemId, Product product, Cart cart, int quantity) {
-            CartItem cartItem = new CartItem(quantity);
-            cartItem.setProduct(product);
-            cartItem.setCart(cart);
-            EntityTestUtil.setId(cartItem, cartItemId);
-
-            return cartItem;
-        }
-
-        /**
-         * Sets up the common mocking for a successful createCartItem() flow
-         * where the cart item does NOT already exist (brand-new item):
-         * - product exists and is active
-         * - authenticated user email is stubbed
-         * - customer with cart is found
-         * - no existing cart item for the product
-         * - repository.save() returns the saved cart item
-         */
-        private StubResult stubCreateNewCartItemSuccess(int requestQuantity) {
-            UUID productId = UUID.randomUUID();
-            UUID customerId = UUID.randomUUID();
-            UUID cartId = UUID.randomUUID();
-            UUID cartItemId = UUID.randomUUID();
-
-            Product product = buildActiveProduct(productId, VALID_PRODUCT_STOCK);
-            Customer customer = buildCustomerWithCart(customerId, cartId);
-
-            stubAuthenticatedUser(VALID_EMAIL);
-
-            when(productRepository.findById(productId)).thenReturn(Optional.of(product));
-            when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
-            when(cartItemRepository.findCartItem(productId, cartId)).thenReturn(Optional.empty());
-
-            CartItem savedCartItem = buildSavedCartItem(cartItemId, product, customer.getCart(), requestQuantity);
-            when(cartItemRepository.save(any(CartItem.class))).thenReturn(savedCartItem);
-
-            return new StubResult(productId, customerId, cartId, cartItemId, product, customer);
-        }
-
-        /**
-         * Holds references to entities created during test setup,
-         * so tests can assert against them without re-querying.
-         */
-        private record StubResult(UUID productId, UUID customerId, UUID cartId,
-                                  UUID cartItemId, Product product, Customer customer) {
-        }
 
         // ==================== createCartItem() — SUCCESS CASES ====================
 
@@ -1012,36 +1014,6 @@ class CartItemServiceImplTest {
     @DisplayName("getCartItems()")
     class GetCartItems {
 
-        // ======================== Helper Methods ========================
-
-        /**
-         * Sets up a mocked {@link SecurityContext} so that
-         * {@code SecurityContextHolder.getContext().getAuthentication().getName()}
-         * returns the given email.
-         *
-         * <p><b>IMPORTANT:</b> Every test that calls this helper MUST clear
-         * the context afterward via {@link #clearSecurityContext()} to prevent
-         * test pollution across the suite.</p>
-         */
-        private void stubAuthenticatedUser(String email) {
-            Authentication authentication = mock(Authentication.class);
-            when(authentication.getName()).thenReturn(email);
-
-            SecurityContext securityContext = mock(SecurityContext.class);
-            when(securityContext.getAuthentication()).thenReturn(authentication);
-
-            SecurityContextHolder.setContext(securityContext);
-        }
-
-        /**
-         * Clears the {@link SecurityContextHolder} to avoid leaking state
-         * between tests (static thread-local pollution).
-         */
-        @AfterEach
-        void clearSecurityContext() {
-            SecurityContextHolder.clearContext();
-        }
-
         /**
          * Creates an active {@link Product} with an ID assigned via reflection,
          * mimicking Hibernate's @UuidGenerator behavior on persist.
@@ -1056,37 +1028,6 @@ class CartItemServiceImplTest {
             EntityTestUtil.setId(product, id);
 
             return product;
-        }
-
-        /**
-         * Creates a {@link Customer} with a {@link Cart} already assigned,
-         * and both have IDs set via reflection.
-         */
-        private Customer buildCustomerWithCart(UUID customerId, UUID cartId) {
-            Customer customer = new Customer(
-                    "John", "Doe", VALID_EMAIL,
-                    "New York, USA", "$2a$10$encodedPasswordHash"
-            );
-            EntityTestUtil.setId(customer, customerId);
-
-            Cart cart = new Cart();
-            EntityTestUtil.setId(cart, cartId);
-            customer.setCart(cart);
-
-            return customer;
-        }
-
-        /**
-         * Creates a saved {@link CartItem} with product and cart relationships
-         * and an ID assigned via reflection.
-         */
-        private CartItem buildSavedCartItem(UUID cartItemId, Product product, Cart cart, int quantity) {
-            CartItem cartItem = new CartItem(quantity);
-            cartItem.setProduct(product);
-            cartItem.setCart(cart);
-            EntityTestUtil.setId(cartItem, cartItemId);
-
-            return cartItem;
         }
 
         // ==================== getCartItems() — SUCCESS CASES ====================
@@ -1605,6 +1546,792 @@ class CartItemServiceImplTest {
                 // Assert
                 assertEquals(1, result.size());
                 assertEquals(1, result.getFirst().quantity());
+            }
+        }
+    }
+
+    // ==================== updateCartItem() ====================
+    @Nested
+    @DisplayName("updateCartItem()")
+    class UpdateCartItem {
+
+        // ==================== updateCartItem() — SUCCESS CASES ====================
+
+        @Nested
+        @DisplayName("updateCartItem() — Success cases")
+        class UpdateCartItemSuccess {
+
+            @Test
+            @DisplayName("Should return a valid CartItemResponseDTO when updating cart item quantity")
+            void shouldReturnCartItemResponseDTO_whenUpdatingQuantity() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+                UUID cartItemId = UUID.randomUUID();
+                int newQuantity = 5;
+
+                Product product = buildActiveProduct(productId, VALID_PRODUCT_STOCK);
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+                CartItem existingCartItem = buildSavedCartItem(cartItemId, product, customer.getCart(), VALID_REQUEST_QUANTITY);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findCartItem(productId, cartId)).thenReturn(Optional.of(existingCartItem));
+
+                CartItem savedCartItem = buildSavedCartItem(cartItemId, product, customer.getCart(), newQuantity);
+                when(cartItemRepository.save(any(CartItem.class))).thenReturn(savedCartItem);
+
+                // Act
+                CartItemResponseDTO response = cartItemService.updateCartItem(productId, new CartItemUpdateDTO(newQuantity));
+
+                // Assert
+                assertNotNull(response);
+                assertEquals(productId, response.productId());
+                assertEquals(VALID_PRODUCT_TITLE, response.productTitle());
+                assertEquals(7999L, response.price());
+                assertTrue(response.isAvailable());
+                assertEquals(newQuantity, response.quantity());
+            }
+
+            @Test
+            @DisplayName("Should save the cart item exactly once via the repository")
+            void shouldCallRepositorySaveExactlyOnce() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+                UUID cartItemId = UUID.randomUUID();
+                int newQuantity = 5;
+
+                Product product = buildActiveProduct(productId, VALID_PRODUCT_STOCK);
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+                CartItem existingCartItem = buildSavedCartItem(cartItemId, product, customer.getCart(), VALID_REQUEST_QUANTITY);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findCartItem(productId, cartId)).thenReturn(Optional.of(existingCartItem));
+
+                CartItem savedCartItem = buildSavedCartItem(cartItemId, product, customer.getCart(), newQuantity);
+                when(cartItemRepository.save(any(CartItem.class))).thenReturn(savedCartItem);
+
+                // Act
+                cartItemService.updateCartItem(productId, new CartItemUpdateDTO(newQuantity));
+
+                // Assert
+                verify(cartItemRepository).save(any(CartItem.class));
+                verifyNoMoreInteractions(cartItemRepository);
+            }
+
+            @Test
+            @DisplayName("Should set the quantity to the new requested amount on the cart item before saving")
+            void shouldSetCorrectQuantity_beforeSaving() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+                UUID cartItemId = UUID.randomUUID();
+                int newQuantity = 7;
+
+                Product product = buildActiveProduct(productId, VALID_PRODUCT_STOCK);
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+                CartItem existingCartItem = buildSavedCartItem(cartItemId, product, customer.getCart(), VALID_REQUEST_QUANTITY);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findCartItem(productId, cartId)).thenReturn(Optional.of(existingCartItem));
+
+                when(cartItemRepository.save(any(CartItem.class))).thenAnswer(inv -> {
+                    CartItem captured = inv.getArgument(0);
+
+                    // updateCartItem replaces the quantity (not increments)
+                    assertEquals(newQuantity, captured.getQuantity(),
+                            "Cart item quantity should be set to the new requested amount");
+
+                    return buildSavedCartItem(cartItemId, product, customer.getCart(), captured.getQuantity());
+                });
+
+                // Act
+                cartItemService.updateCartItem(productId, new CartItemUpdateDTO(newQuantity));
+
+                // Assert
+                verify(cartItemRepository).save(any(CartItem.class));
+            }
+
+            @Test
+            @DisplayName("Should verify the execution order: findCustomer → findCartItem → save")
+            void shouldVerifyExecutionOrder() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+                UUID cartItemId = UUID.randomUUID();
+                int newQuantity = 5;
+
+                Product product = buildActiveProduct(productId, VALID_PRODUCT_STOCK);
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+                CartItem existingCartItem = buildSavedCartItem(cartItemId, product, customer.getCart(), VALID_REQUEST_QUANTITY);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findCartItem(productId, cartId)).thenReturn(Optional.of(existingCartItem));
+
+                CartItem savedCartItem = buildSavedCartItem(cartItemId, product, customer.getCart(), newQuantity);
+                when(cartItemRepository.save(any(CartItem.class))).thenReturn(savedCartItem);
+
+                // Act
+                cartItemService.updateCartItem(productId, new CartItemUpdateDTO(newQuantity));
+
+                // Assert — verify the order of repository interactions
+                var inOrderCustomer = inOrder(customerRepository);
+                inOrderCustomer.verify(customerRepository).findByEmailWithCart(VALID_EMAIL);
+
+                var inOrderCartItem = inOrder(cartItemRepository);
+                inOrderCartItem.verify(cartItemRepository).findCartItem(productId, cartId);
+                inOrderCartItem.verify(cartItemRepository).save(any(CartItem.class));
+            }
+
+            @Test
+            @DisplayName("Should not interact with productRepository at all")
+            void shouldNotInteractWithProductRepository() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+                UUID cartItemId = UUID.randomUUID();
+                int newQuantity = 5;
+
+                Product product = buildActiveProduct(productId, VALID_PRODUCT_STOCK);
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+                CartItem existingCartItem = buildSavedCartItem(cartItemId, product, customer.getCart(), VALID_REQUEST_QUANTITY);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findCartItem(productId, cartId)).thenReturn(Optional.of(existingCartItem));
+
+                CartItem savedCartItem = buildSavedCartItem(cartItemId, product, customer.getCart(), newQuantity);
+                when(cartItemRepository.save(any(CartItem.class))).thenReturn(savedCartItem);
+
+                // Act
+                cartItemService.updateCartItem(productId, new CartItemUpdateDTO(newQuantity));
+
+                // Assert
+                verifyNoInteractions(productRepository);
+            }
+
+            @Test
+            @DisplayName("Should succeed when requested quantity exactly equals stock (boundary)")
+            void shouldSucceed_whenQuantityEqualsStock() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+                UUID cartItemId = UUID.randomUUID();
+                int stock = 10;
+                int newQuantity = 10; // exactly equals stock
+
+                Product product = buildActiveProduct(productId, stock);
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+                CartItem existingCartItem = buildSavedCartItem(cartItemId, product, customer.getCart(), VALID_REQUEST_QUANTITY);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findCartItem(productId, cartId)).thenReturn(Optional.of(existingCartItem));
+
+                CartItem savedCartItem = buildSavedCartItem(cartItemId, product, customer.getCart(), newQuantity);
+                when(cartItemRepository.save(any(CartItem.class))).thenReturn(savedCartItem);
+
+                // Act
+                CartItemResponseDTO response = cartItemService.updateCartItem(productId, new CartItemUpdateDTO(newQuantity));
+
+                // Assert
+                assertNotNull(response);
+                assertEquals(stock, response.quantity());
+            }
+        }
+
+        // ==================== updateCartItem() — NOT FOUND CASES (customer) ====================
+
+        @Nested
+        @DisplayName("updateCartItem() — Customer not found cases")
+        class UpdateCartItemCustomerNotFound {
+
+            @Test
+            @DisplayName("Should throw CustomerNotFoundException when customer profile not found")
+            void shouldThrowCustomerNotFoundException_whenCustomerNotFound() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.empty());
+
+                // Act & Assert
+                CustomerNotFoundException exception = assertThrows(
+                        CustomerNotFoundException.class,
+                        () -> cartItemService.updateCartItem(productId, new CartItemUpdateDTO(5))
+                );
+
+                assertEquals("Profile not found", exception.getMessage());
+
+                verify(customerRepository).findByEmailWithCart(VALID_EMAIL);
+                verifyNoMoreInteractions(customerRepository);
+            }
+
+            @Test
+            @DisplayName("Should not interact with cartItemRepository when customer not found")
+            void shouldNotInteractWithCartItemRepo_whenCustomerNotFound() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.empty());
+
+                // Act
+                assertThrows(CustomerNotFoundException.class,
+                        () -> cartItemService.updateCartItem(productId, new CartItemUpdateDTO(5)));
+
+                // Assert
+                verify(customerRepository).findByEmailWithCart(VALID_EMAIL);
+                verifyNoInteractions(cartItemRepository);
+            }
+
+            @Test
+            @DisplayName("Should not interact with productRepository when customer not found")
+            void shouldNotInteractWithProductRepo_whenCustomerNotFound() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.empty());
+
+                // Act
+                assertThrows(CustomerNotFoundException.class,
+                        () -> cartItemService.updateCartItem(productId, new CartItemUpdateDTO(5)));
+
+                // Assert
+                verifyNoInteractions(productRepository);
+            }
+        }
+
+        // ==================== updateCartItem() — NOT FOUND CASES (cart item) ====================
+
+        @Nested
+        @DisplayName("updateCartItem() — Cart item not found cases")
+        class UpdateCartItemCartItemNotFound {
+
+            @Test
+            @DisplayName("Should throw CartItemNotFoundException when cart item does not exist for the product")
+            void shouldThrowCartItemNotFoundException_whenCartItemNotFound() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findCartItem(productId, cartId)).thenReturn(Optional.empty());
+
+                // Act & Assert
+                CartItemNotFoundException exception = assertThrows(
+                        CartItemNotFoundException.class,
+                        () -> cartItemService.updateCartItem(productId, new CartItemUpdateDTO(5))
+                );
+
+                assertEquals("CartItem not found in your profile", exception.getMessage());
+
+                verify(cartItemRepository).findCartItem(productId, cartId);
+                verifyNoMoreInteractions(cartItemRepository);
+            }
+
+            @Test
+            @DisplayName("Should not call save when cart item is not found")
+            void shouldNotCallSave_whenCartItemNotFound() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findCartItem(productId, cartId)).thenReturn(Optional.empty());
+
+                // Act
+                assertThrows(CartItemNotFoundException.class,
+                        () -> cartItemService.updateCartItem(productId, new CartItemUpdateDTO(5)));
+
+                // Assert
+                verify(cartItemRepository, never()).save(any(CartItem.class));
+            }
+        }
+
+        // ==================== updateCartItem() — PRODUCT INACTIVE CASES ====================
+
+        @Nested
+        @DisplayName("updateCartItem() — Product inactive cases")
+        class UpdateCartItemProductInactive {
+
+            @Test
+            @DisplayName("Should throw ProductNotFoundException when product is inactive")
+            void shouldThrowProductNotFoundException_whenProductIsInactive() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+                UUID cartItemId = UUID.randomUUID();
+
+                Product inactiveProduct = buildActiveProduct(productId, VALID_PRODUCT_STOCK);
+                inactiveProduct.setActive(false);
+
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+                CartItem existingCartItem = buildSavedCartItem(cartItemId, inactiveProduct, customer.getCart(), VALID_REQUEST_QUANTITY);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findCartItem(productId, cartId)).thenReturn(Optional.of(existingCartItem));
+
+                // Act & Assert
+                ProductNotFoundException exception = assertThrows(
+                        ProductNotFoundException.class,
+                        () -> cartItemService.updateCartItem(productId, new CartItemUpdateDTO(5))
+                );
+
+                assertEquals("This product is no longer available", exception.getMessage());
+            }
+
+            @Test
+            @DisplayName("Should not call save when product is inactive")
+            void shouldNotCallSave_whenProductIsInactive() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+                UUID cartItemId = UUID.randomUUID();
+
+                Product inactiveProduct = buildActiveProduct(productId, VALID_PRODUCT_STOCK);
+                inactiveProduct.setActive(false);
+
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+                CartItem existingCartItem = buildSavedCartItem(cartItemId, inactiveProduct, customer.getCart(), VALID_REQUEST_QUANTITY);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findCartItem(productId, cartId)).thenReturn(Optional.of(existingCartItem));
+
+                // Act
+                assertThrows(ProductNotFoundException.class,
+                        () -> cartItemService.updateCartItem(productId, new CartItemUpdateDTO(5)));
+
+                // Assert
+                verify(cartItemRepository, never()).save(any(CartItem.class));
+            }
+        }
+
+        // ==================== updateCartItem() — INSUFFICIENT STOCK CASES ====================
+
+        @Nested
+        @DisplayName("updateCartItem() — Insufficient stock cases")
+        class UpdateCartItemInsufficientStock {
+
+            @Test
+            @DisplayName("Should throw InsufficientStockException when requested quantity exceeds stock")
+            void shouldThrowInsufficientStockException_whenQuantityExceedsStock() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+                UUID cartItemId = UUID.randomUUID();
+                int stock = 5;
+                int newQuantity = 6; // exceeds stock
+
+                Product product = buildActiveProduct(productId, stock);
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+                CartItem existingCartItem = buildSavedCartItem(cartItemId, product, customer.getCart(), VALID_REQUEST_QUANTITY);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findCartItem(productId, cartId)).thenReturn(Optional.of(existingCartItem));
+
+                // Act & Assert
+                InsufficientStockException exception = assertThrows(
+                        InsufficientStockException.class,
+                        () -> cartItemService.updateCartItem(productId, new CartItemUpdateDTO(newQuantity))
+                );
+                assertEquals("Requested quantity is not available in stock", exception.getMessage());
+            }
+
+            @Test
+            @DisplayName("Should not call save when stock is insufficient")
+            void shouldNotCallSave_whenStockIsInsufficient() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+                UUID cartItemId = UUID.randomUUID();
+                int stock = 2;
+                int newQuantity = 5;
+
+                Product product = buildActiveProduct(productId, stock);
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+                CartItem existingCartItem = buildSavedCartItem(cartItemId, product, customer.getCart(), VALID_REQUEST_QUANTITY);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findCartItem(productId, cartId)).thenReturn(Optional.of(existingCartItem));
+
+                // Act
+                assertThrows(InsufficientStockException.class,
+                        () -> cartItemService.updateCartItem(productId, new CartItemUpdateDTO(newQuantity)));
+
+                // Assert
+                verify(cartItemRepository, never()).save(any(CartItem.class));
+            }
+
+            @Test
+            @DisplayName("Should throw InsufficientStockException when requesting exactly one more than stock (boundary)")
+            void shouldThrowInsufficientStockException_whenOneOverStock() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+                UUID cartItemId = UUID.randomUUID();
+                int stock = 10;
+                int newQuantity = 11; // exactly one over
+
+                Product product = buildActiveProduct(productId, stock);
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+                CartItem existingCartItem = buildSavedCartItem(cartItemId, product, customer.getCart(), VALID_REQUEST_QUANTITY);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findCartItem(productId, cartId)).thenReturn(Optional.of(existingCartItem));
+
+                // Act & Assert
+                assertThrows(InsufficientStockException.class,
+                        () -> cartItemService.updateCartItem(productId, new CartItemUpdateDTO(newQuantity)));
+            }
+        }
+
+        // ==================== updateCartItem() — SECURITY CONTEXT FAILURES ====================
+
+        @Nested
+        @DisplayName("updateCartItem() — Security context failures")
+        class UpdateCartItemSecurityContextFailures {
+
+            @Test
+            @DisplayName("Should throw NullPointerException when SecurityContext has no Authentication")
+            void shouldThrowNPE_whenAuthenticationIsNull() {
+                // Arrange — no authentication present
+                UUID productId = UUID.randomUUID();
+
+                SecurityContext securityContext = mock(SecurityContext.class);
+                when(securityContext.getAuthentication()).thenReturn(null);
+                SecurityContextHolder.setContext(securityContext);
+
+                // Act & Assert — calling getName() on null Authentication throws NPE
+                assertThrows(NullPointerException.class,
+                        () -> cartItemService.updateCartItem(productId, new CartItemUpdateDTO(5)));
+
+                // Verify no repositories are called
+                verifyNoInteractions(customerRepository);
+                verifyNoInteractions(cartItemRepository);
+                verifyNoInteractions(productRepository);
+            }
+        }
+
+        // ==================== updateCartItem() — SERVER FAILURE CASES ====================
+
+        @Nested
+        @DisplayName("updateCartItem() — Server failure simulation")
+        class UpdateCartItemServerFailures {
+
+            @Test
+            @DisplayName("Should propagate RuntimeException when customerRepository.findByEmailWithCart throws")
+            void shouldPropagateException_whenCustomerRepositoryThrows() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL))
+                        .thenThrow(new RuntimeException("Database connection lost"));
+
+                // Act & Assert
+                RuntimeException exception = assertThrows(
+                        RuntimeException.class,
+                        () -> cartItemService.updateCartItem(productId, new CartItemUpdateDTO(5))
+                );
+                assertEquals("Database connection lost", exception.getMessage());
+
+                verifyNoInteractions(cartItemRepository);
+            }
+
+            @Test
+            @DisplayName("Should propagate RuntimeException when cartItemRepository.findCartItem throws")
+            void shouldPropagateException_whenCartItemRepositoryThrows() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findCartItem(productId, cartId))
+                        .thenThrow(new RuntimeException("Database unavailable"));
+
+                // Act & Assert
+                RuntimeException exception = assertThrows(
+                        RuntimeException.class,
+                        () -> cartItemService.updateCartItem(productId, new CartItemUpdateDTO(5))
+                );
+                assertEquals("Database unavailable", exception.getMessage());
+                verify(cartItemRepository, never()).save(any(CartItem.class));
+            }
+
+            @Test
+            @DisplayName("Should propagate RuntimeException when cartItemRepository.save throws")
+            void shouldPropagateException_whenCartItemRepositorySaveThrows() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+                UUID cartItemId = UUID.randomUUID();
+                int newQuantity = 5;
+
+                Product product = buildActiveProduct(productId, VALID_PRODUCT_STOCK);
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+                CartItem existingCartItem = buildSavedCartItem(cartItemId, product, customer.getCart(), VALID_REQUEST_QUANTITY);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findCartItem(productId, cartId)).thenReturn(Optional.of(existingCartItem));
+                when(cartItemRepository.save(any(CartItem.class)))
+                        .thenThrow(new RuntimeException("Persistence failure"));
+
+                // Act & Assert
+                RuntimeException exception = assertThrows(
+                        RuntimeException.class,
+                        () -> cartItemService.updateCartItem(productId, new CartItemUpdateDTO(newQuantity))
+                );
+                assertEquals("Persistence failure", exception.getMessage());
+            }
+
+            @Test
+            @DisplayName("Should propagate IllegalStateException when cartItemRepository.save throws")
+            void shouldPropagateIllegalStateException_whenCartItemRepositorySaveThrows() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+                UUID cartItemId = UUID.randomUUID();
+                int newQuantity = 5;
+
+                Product product = buildActiveProduct(productId, VALID_PRODUCT_STOCK);
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+                CartItem existingCartItem = buildSavedCartItem(cartItemId, product, customer.getCart(), VALID_REQUEST_QUANTITY);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findCartItem(productId, cartId)).thenReturn(Optional.of(existingCartItem));
+                when(cartItemRepository.save(any(CartItem.class)))
+                        .thenThrow(new IllegalStateException("Persistence failure"));
+
+                // Act & Assert
+                IllegalStateException exception = assertThrows(
+                        IllegalStateException.class,
+                        () -> cartItemService.updateCartItem(productId, new CartItemUpdateDTO(newQuantity))
+                );
+                assertEquals("Persistence failure", exception.getMessage());
+            }
+        }
+
+        // ==================== updateCartItem() — MAPPER INTERACTION ====================
+
+        @Nested
+        @DisplayName("updateCartItem() — Mapper interaction verification")
+        class UpdateCartItemMapperVerification {
+
+            @Test
+            @DisplayName("Should pass the cart item with correct product to CartItemMapper via repository save")
+            void shouldPassCartItemWithCorrectProductToMapper() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+                UUID cartItemId = UUID.randomUUID();
+                int newQuantity = 5;
+
+                Product product = buildActiveProduct(productId, VALID_PRODUCT_STOCK);
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+                CartItem existingCartItem = buildSavedCartItem(cartItemId, product, customer.getCart(), VALID_REQUEST_QUANTITY);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findCartItem(productId, cartId)).thenReturn(Optional.of(existingCartItem));
+
+                CartItem savedCartItem = buildSavedCartItem(cartItemId, product, customer.getCart(), newQuantity);
+                when(cartItemRepository.save(any(CartItem.class))).thenReturn(savedCartItem);
+
+                // Act
+                CartItemResponseDTO response = cartItemService.updateCartItem(productId, new CartItemUpdateDTO(newQuantity));
+
+                // Assert — verify the mapper output matches what we expect
+                assertEquals(productId, response.productId());
+                assertEquals(VALID_PRODUCT_TITLE, response.productTitle());
+                assertEquals(7999L, response.price());
+                assertTrue(response.isAvailable());
+                assertEquals(newQuantity, response.quantity());
+            }
+        }
+
+        // ==================== updateCartItem() — EDGE CASES ====================
+
+        @Nested
+        @DisplayName("updateCartItem() — Edge cases")
+        class UpdateCartItemEdgeCases {
+
+            @Test
+            @DisplayName("Should succeed when updating to minimum quantity of 1")
+            void shouldSucceed_whenUpdatingToMinimumQuantityOfOne() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+                UUID cartItemId = UUID.randomUUID();
+
+                Product product = buildActiveProduct(productId, VALID_PRODUCT_STOCK);
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+                CartItem existingCartItem = buildSavedCartItem(cartItemId, product, customer.getCart(), VALID_REQUEST_QUANTITY);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findCartItem(productId, cartId)).thenReturn(Optional.of(existingCartItem));
+
+                CartItem savedCartItem = buildSavedCartItem(cartItemId, product, customer.getCart(), 1);
+                when(cartItemRepository.save(any(CartItem.class))).thenReturn(savedCartItem);
+
+                // Act
+                CartItemResponseDTO response = cartItemService.updateCartItem(productId, new CartItemUpdateDTO(1));
+
+                // Assert
+                assertNotNull(response);
+                assertEquals(1, response.quantity());
+            }
+
+            @Test
+            @DisplayName("Should succeed when product has stock of exactly 1 and updating to 1")
+            void shouldSucceed_whenStockIsOneAndUpdatingToOne() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+                UUID cartItemId = UUID.randomUUID();
+                int stock = 1;
+
+                Product product = buildActiveProduct(productId, stock);
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+                CartItem existingCartItem = buildSavedCartItem(cartItemId, product, customer.getCart(), VALID_REQUEST_QUANTITY);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findCartItem(productId, cartId)).thenReturn(Optional.of(existingCartItem));
+
+                CartItem savedCartItem = buildSavedCartItem(cartItemId, product, customer.getCart(), 1);
+                when(cartItemRepository.save(any(CartItem.class))).thenReturn(savedCartItem);
+
+                // Act
+                CartItemResponseDTO response = cartItemService.updateCartItem(productId, new CartItemUpdateDTO(1));
+
+                // Assert
+                assertNotNull(response);
+                assertEquals(1, response.quantity());
+            }
+
+            @Test
+            @DisplayName("Should reuse the same managed CartItem entity reference when saving")
+            void shouldReuseSameManagedEntity_whenSaving() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+                UUID cartItemId = UUID.randomUUID();
+                int newQuantity = 5;
+
+                Product product = buildActiveProduct(productId, VALID_PRODUCT_STOCK);
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+                CartItem existingCartItem = buildSavedCartItem(cartItemId, product, customer.getCart(), VALID_REQUEST_QUANTITY);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findCartItem(productId, cartId)).thenReturn(Optional.of(existingCartItem));
+
+                when(cartItemRepository.save(any(CartItem.class))).thenAnswer(inv -> {
+                    CartItem captured = inv.getArgument(0);
+
+                    // The existing managed entity is reused — same reference
+                    assertSame(existingCartItem, captured,
+                            "Should reuse the existing managed entity, not create a new one");
+
+                    return buildSavedCartItem(cartItemId, product, customer.getCart(), newQuantity);
+                });
+
+                // Act
+                cartItemService.updateCartItem(productId, new CartItemUpdateDTO(newQuantity));
+
+                // Assert
+                verify(cartItemRepository).save(any(CartItem.class));
+            }
+
+            @Test
+            @DisplayName("Should throw InsufficientStockException when product has zero stock")
+            void shouldThrowInsufficientStockException_whenProductHasZeroStock() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+                UUID cartItemId = UUID.randomUUID();
+                int stock = 0;
+
+                Product product = buildActiveProduct(productId, stock);
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+                CartItem existingCartItem = buildSavedCartItem(cartItemId, product, customer.getCart(), VALID_REQUEST_QUANTITY);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findCartItem(productId, cartId)).thenReturn(Optional.of(existingCartItem));
+
+                // Act & Assert
+                assertThrows(InsufficientStockException.class,
+                        () -> cartItemService.updateCartItem(productId, new CartItemUpdateDTO(1)));
             }
         }
     }
