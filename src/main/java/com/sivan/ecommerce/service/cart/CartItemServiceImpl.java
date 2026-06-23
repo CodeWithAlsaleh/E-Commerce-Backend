@@ -2,9 +2,11 @@ package com.sivan.ecommerce.service.cart;
 
 import com.sivan.ecommerce.dto.cart.CartItemRequestDTO;
 import com.sivan.ecommerce.dto.cart.CartItemResponseDTO;
+import com.sivan.ecommerce.dto.cart.CartItemUpdateDTO;
 import com.sivan.ecommerce.entity.cart.CartItem;
 import com.sivan.ecommerce.entity.customer.Customer;
 import com.sivan.ecommerce.entity.product.Product;
+import com.sivan.ecommerce.exception.CartItemNotFoundException;
 import com.sivan.ecommerce.exception.CustomerNotFoundException;
 import com.sivan.ecommerce.exception.InsufficientStockException;
 import com.sivan.ecommerce.exception.ProductNotFoundException;
@@ -19,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Service
 public class CartItemServiceImpl implements CartItemService {
@@ -98,5 +101,30 @@ public class CartItemServiceImpl implements CartItemService {
 
         return cartItemRepository.findAllByCartIdWithProduct(customer.getCart().getId())
                 .stream().map(CartItemMapper::mapCartItemToCartItemResponse).toList();
+    }
+
+    @Override
+    @Transactional
+    public CartItemResponseDTO updateCartItem(UUID productId, CartItemUpdateDTO cartItemUpdateDTO) {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+
+        Customer customer = customerRepository.findByEmailWithCart(email.toLowerCase())
+                .orElseThrow(() -> new CustomerNotFoundException("Profile not found"));
+
+        CartItem cartItem = cartItemRepository.findCartItem(productId, customer.getCart().getId())
+                .orElseThrow(() -> new CartItemNotFoundException("CartItem not found in your profile"));
+
+        // Extract the product directly from the mapped entity (Hibernate will lazy-load this if needed)
+        Product product = cartItem.getProduct();
+
+        if (!product.isActive())
+            throw new ProductNotFoundException("This product is no longer available");
+
+        if (cartItemUpdateDTO.quantity() > product.getQuantity())
+            throw new InsufficientStockException("Requested quantity is not available in stock");
+
+        cartItem.setQuantity(cartItemUpdateDTO.quantity());
+
+        return CartItemMapper.mapCartItemToCartItemResponse(cartItemRepository.save(cartItem));
     }
 }
