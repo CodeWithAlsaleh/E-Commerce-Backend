@@ -2,6 +2,7 @@ package com.sivan.ecommerce.controller.cart;
 
 import com.sivan.ecommerce.dto.cart.CartItemRequestDTO;
 import com.sivan.ecommerce.dto.cart.CartItemResponseDTO;
+import com.sivan.ecommerce.dto.cart.CartItemUpdateDTO;
 import com.sivan.ecommerce.service.cart.CartItemService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/cart")
@@ -30,5 +32,11 @@ public class CartRestController {
     @GetMapping
     public ResponseEntity<List<CartItemResponseDTO>> getCartItems() {
         return ResponseEntity.ok(cartItemService.getCartItems());
+    }
+
+    @PatchMapping("/items/{productId}")
+    public ResponseEntity<CartItemResponseDTO> updateCartItem(@PathVariable UUID productId,
+                                                              @RequestBody @Valid CartItemUpdateDTO cartItemUpdateDTO) {
+        return ResponseEntity.ok(cartItemService.updateCartItem(productId, cartItemUpdateDTO));
     }
 }
