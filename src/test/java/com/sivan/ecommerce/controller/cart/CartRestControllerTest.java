@@ -1,5 +1,7 @@
 package com.sivan.ecommerce.controller.cart;
 
+import com.sivan.ecommerce.dto.cart.CartItemUpdateDTO;
+import com.sivan.ecommerce.exception.CartItemNotFoundException;
 import tools.jackson.databind.ObjectMapper;
 import com.sivan.ecommerce.config.SecurityConfig;
 import com.sivan.ecommerce.dto.cart.CartItemRequestDTO;
@@ -28,6 +30,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -915,6 +918,446 @@ class CartRestControllerTest {
                 mockMvc.perform(get(CART_URL))
                         .andExpect(status().isOk())
                         .andExpect(jsonPath("$[0].quantity").value(Integer.MAX_VALUE));
+            }
+        }
+    }
+
+    // ==================== updateCartItem() ====================
+    @Nested
+    @DisplayName("updateCartItem()")
+    class UpdateCartItem {
+
+        // ======================== Helpers ========================
+
+        private CartItemUpdateDTO validUpdateRequest() {
+            return new CartItemUpdateDTO(5);
+        }
+
+        private CartItemResponseDTO validUpdateResponse() {
+            return new CartItemResponseDTO(VALID_PRODUCT_ID, VALID_PRODUCT_TITLE, VALID_PRICE, VALID_IS_ACTIVE, 5);
+        }
+
+        private String getPatchUrl(UUID productId) {
+            return CART_ITEMS_URL + "/" + productId;
+        }
+
+        // ==================== SUCCESS CASES (200) ====================
+
+        @Nested
+        @DisplayName("Success cases — 200 OK")
+        class SuccessCases {
+
+            @Test
+            @DisplayName("Should return 200 and correct JSON when authenticated USER updates cart item quantity")
+            @WithMockUser(roles = "USER")
+            void shouldReturn200_whenValidCartItemUpdate() throws Exception {
+                // Arrange
+                when(cartItemService.updateCartItem(eq(VALID_PRODUCT_ID), any(CartItemUpdateDTO.class)))
+                        .thenReturn(validUpdateResponse());
+
+                // Act & Assert
+                mockMvc.perform(patch(getPatchUrl(VALID_PRODUCT_ID))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(validUpdateRequest())))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.productId").value(VALID_PRODUCT_ID.toString()))
+                        .andExpect(jsonPath("$.quantity").value(5));
+
+                verify(cartItemService).updateCartItem(eq(VALID_PRODUCT_ID), any(CartItemUpdateDTO.class));
+            }
+
+            @Test
+            @DisplayName("Should return 200 when quantity is exactly 1 (minimum valid value)")
+            @WithMockUser(roles = "USER")
+            void shouldReturn200_whenQuantityIsExactlyOne() throws Exception {
+                // Arrange
+                CartItemUpdateDTO request = new CartItemUpdateDTO(1);
+                CartItemResponseDTO response = new CartItemResponseDTO(VALID_PRODUCT_ID, VALID_PRODUCT_TITLE, VALID_PRICE, VALID_IS_ACTIVE, 1);
+                when(cartItemService.updateCartItem(eq(VALID_PRODUCT_ID), any(CartItemUpdateDTO.class))).thenReturn(response);
+
+                // Act & Assert
+                mockMvc.perform(patch(getPatchUrl(VALID_PRODUCT_ID))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.quantity").value(1));
+            }
+        }
+
+        // ==================== AUTHENTICATION FAILURES (401) ====================
+
+        @Nested
+        @DisplayName("Authentication failures — 401 Unauthorized")
+        class AuthenticationFailures {
+
+            @Test
+            @DisplayName("Should return 401 when no credentials are provided (anonymous)")
+            void shouldReturn401_whenNoCredentials() throws Exception {
+                mockMvc.perform(patch(getPatchUrl(VALID_PRODUCT_ID))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(validUpdateRequest())))
+                        .andExpect(status().isUnauthorized());
+
+                verifyNoInteractions(cartItemService);
+            }
+
+            @Test
+            @DisplayName("Should return 401 when invalid credentials are provided")
+            void shouldReturn401_whenInvalidCredentials() throws Exception {
+                mockMvc.perform(patch(getPatchUrl(VALID_PRODUCT_ID))
+                                .with(httpBasic("wrong@email.com", "WrongPassword1!"))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(validUpdateRequest())))
+                        .andExpect(status().isUnauthorized());
+
+                verifyNoInteractions(cartItemService);
+            }
+        }
+
+        // ==================== AUTHORIZATION FAILURES (403) ====================
+
+        @Nested
+        @DisplayName("Authorization failures — 403 Forbidden")
+        class AuthorizationFailures {
+
+            @Test
+            @DisplayName("Should return 403 when authenticated user has ROLE_SYSTEM (not USER)")
+            @WithMockUser(roles = "SYSTEM")
+            void shouldReturn403_whenRoleIsAdmin() throws Exception {
+                mockMvc.perform(patch(getPatchUrl(VALID_PRODUCT_ID))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(validUpdateRequest())))
+                        .andExpect(status().isForbidden());
+
+                verifyNoInteractions(cartItemService);
+            }
+
+            @Test
+            @DisplayName("Should return 403 when user has no roles at all")
+            @WithMockUser(roles = {})
+            void shouldReturn403_whenUserHasNoRoles() throws Exception {
+                mockMvc.perform(patch(getPatchUrl(VALID_PRODUCT_ID))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(validUpdateRequest())))
+                        .andExpect(status().isForbidden());
+
+                verifyNoInteractions(cartItemService);
+            }
+        }
+
+        // ==================== VALIDATION FAILURES (400) ====================
+
+        @Nested
+        @DisplayName("Validation failures — 400 Bad Request")
+        class ValidationFailures {
+
+            @Test
+            @DisplayName("Should return 400 when productId in path is invalid UUID format")
+            @WithMockUser(roles = "USER")
+            void shouldReturn400_whenProductIdIsInvalidUUID() throws Exception {
+                mockMvc.perform(patch(CART_ITEMS_URL + "/not-a-uuid")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(validUpdateRequest())))
+                        .andExpect(status().isBadRequest());
+
+                verifyNoInteractions(cartItemService);
+            }
+
+            @Test
+            @DisplayName("Should return 400 when quantity is null")
+            @WithMockUser(roles = "USER")
+            void shouldReturn400_whenQuantityIsNull() throws Exception {
+                CartItemUpdateDTO request = new CartItemUpdateDTO(null);
+
+                mockMvc.perform(patch(getPatchUrl(VALID_PRODUCT_ID))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.status").value(400))
+                        .andExpect(jsonPath("$.message").isNotEmpty());
+
+                verifyNoInteractions(cartItemService);
+            }
+
+            @Test
+            @DisplayName("Should return 400 when quantity is zero")
+            @WithMockUser(roles = "USER")
+            void shouldReturn400_whenQuantityIsZero() throws Exception {
+                CartItemUpdateDTO request = new CartItemUpdateDTO(0);
+
+                mockMvc.perform(patch(getPatchUrl(VALID_PRODUCT_ID))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.status").value(400))
+                        .andExpect(jsonPath("$.message").isNotEmpty());
+
+                verifyNoInteractions(cartItemService);
+            }
+
+            @Test
+            @DisplayName("Should return 400 when quantity is negative")
+            @WithMockUser(roles = "USER")
+            void shouldReturn400_whenQuantityIsNegative() throws Exception {
+                CartItemUpdateDTO request = new CartItemUpdateDTO(-5);
+
+                mockMvc.perform(patch(getPatchUrl(VALID_PRODUCT_ID))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.status").value(400))
+                        .andExpect(jsonPath("$.message").isNotEmpty());
+
+                verifyNoInteractions(cartItemService);
+            }
+        }
+
+        // ==================== NOT FOUND CASES (404) ====================
+
+        @Nested
+        @DisplayName("Not found cases — 404 Not Found")
+        class NotFoundCases {
+
+            @Test
+            @DisplayName("Should return 404 when cart item does not exist for the user")
+            @WithMockUser(roles = "USER")
+            void shouldReturn404_whenCartItemNotFound() throws Exception {
+                when(cartItemService.updateCartItem(eq(VALID_PRODUCT_ID), any(CartItemUpdateDTO.class)))
+                        .thenThrow(new CartItemNotFoundException("CartItem not found in your profile"));
+
+                mockMvc.perform(patch(getPatchUrl(VALID_PRODUCT_ID))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(validUpdateRequest())))
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.status").value(404))
+                        .andExpect(jsonPath("$.message").value("CartItem not found in your profile"));
+            }
+
+            @Test
+            @DisplayName("Should return 404 when product does not exist in cart")
+            @WithMockUser(roles = "USER")
+            void shouldReturn404_whenProductNotFound() throws Exception {
+                when(cartItemService.updateCartItem(eq(VALID_PRODUCT_ID), any(CartItemUpdateDTO.class)))
+                        .thenThrow(new ProductNotFoundException("This product is no longer available"));
+
+                mockMvc.perform(patch(getPatchUrl(VALID_PRODUCT_ID))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(validUpdateRequest())))
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.status").value(404))
+                        .andExpect(jsonPath("$.message").value("This product is no longer available"));
+            }
+
+            @Test
+            @DisplayName("Should return 404 when customer profile is not found")
+            @WithMockUser(roles = "USER")
+            void shouldReturn404_whenCustomerNotFound() throws Exception {
+                when(cartItemService.updateCartItem(eq(VALID_PRODUCT_ID), any(CartItemUpdateDTO.class)))
+                        .thenThrow(new CustomerNotFoundException("Profile not found"));
+
+                mockMvc.perform(patch(getPatchUrl(VALID_PRODUCT_ID))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(validUpdateRequest())))
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.status").value(404))
+                        .andExpect(jsonPath("$.message").value("Profile not found"));
+            }
+        }
+
+        // ==================== CONFLICT CASES (409) ====================
+
+        @Nested
+        @DisplayName("Conflict cases — 409 Conflict")
+        class ConflictCases {
+
+            @Test
+            @DisplayName("Should return 409 when requested quantity exceeds available stock")
+            @WithMockUser(roles = "USER")
+            void shouldReturn409_whenInsufficientStock() throws Exception {
+                when(cartItemService.updateCartItem(eq(VALID_PRODUCT_ID), any(CartItemUpdateDTO.class)))
+                        .thenThrow(new InsufficientStockException("Requested quantity is not available in stock"));
+
+                mockMvc.perform(patch(getPatchUrl(VALID_PRODUCT_ID))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(validUpdateRequest())))
+                        .andExpect(status().isConflict())
+                        .andExpect(jsonPath("$.status").value(409))
+                        .andExpect(jsonPath("$.message").value("Requested quantity is not available in stock"));
+            }
+        }
+
+        // ==================== SERVICE EXCEPTION HANDLING ====================
+
+        @Nested
+        @DisplayName("Service exception handling")
+        class ServiceExceptionHandling {
+
+            @Test
+            @DisplayName("Should return 500 when service throws an unexpected RuntimeException")
+            @WithMockUser(roles = "USER")
+            void shouldReturn500_whenServiceThrowsRuntimeException() throws Exception {
+                when(cartItemService.updateCartItem(eq(VALID_PRODUCT_ID), any(CartItemUpdateDTO.class)))
+                        .thenThrow(new RuntimeException("Database error"));
+
+                mockMvc.perform(patch(getPatchUrl(VALID_PRODUCT_ID))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(validUpdateRequest())))
+                        .andExpect(status().isInternalServerError())
+                        .andExpect(jsonPath("$.status").value(500))
+                        .andExpect(jsonPath("$.message").value("An unexpected error occurred."));
+            }
+
+            @Test
+            @DisplayName("Should return 500 when service throws an unexpected IllegalStateException")
+            @WithMockUser(roles = "USER")
+            void shouldReturn500_whenServiceThrowsIllegalStateException() throws Exception {
+                when(cartItemService.updateCartItem(eq(VALID_PRODUCT_ID), any(CartItemUpdateDTO.class)))
+                        .thenThrow(new IllegalStateException("Database error"));
+
+                mockMvc.perform(patch(getPatchUrl(VALID_PRODUCT_ID))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(validUpdateRequest())))
+                        .andExpect(status().isInternalServerError())
+                        .andExpect(jsonPath("$.status").value(500))
+                        .andExpect(jsonPath("$.message").value("An unexpected error occurred."));
+            }
+        }
+
+        // ==================== MALFORMED INPUT ====================
+
+        @Nested
+        @DisplayName("Malformed input")
+        class MalformedInput {
+
+            @Test
+            @DisplayName("Should return 400 when request body is malformed JSON")
+            @WithMockUser(roles = "USER")
+            void shouldReturn400_whenJsonIsMalformed() throws Exception {
+                String malformedJson = "{ \"quantity\": }";
+
+                mockMvc.perform(patch(getPatchUrl(VALID_PRODUCT_ID))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(malformedJson))
+                        .andExpect(status().isBadRequest());
+            }
+
+            @Test
+            @DisplayName("Should return 400 when request body is empty")
+            @WithMockUser(roles = "USER")
+            void shouldReturn400_whenJsonIsEmpty() throws Exception {
+                String emptyJson = "{ }";
+
+                mockMvc.perform(patch(getPatchUrl(VALID_PRODUCT_ID))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(emptyJson))
+                        .andExpect(status().isBadRequest());
+            }
+
+            @Test
+            @DisplayName("Should return 400 when request body is missing entirely")
+            @WithMockUser(roles = "USER")
+            void shouldReturn400_whenRequestBodyIsMissing() throws Exception {
+                mockMvc.perform(patch(getPatchUrl(VALID_PRODUCT_ID))
+                                .contentType(MediaType.APPLICATION_JSON))
+                        .andExpect(status().isBadRequest());
+            }
+
+            @Test
+            @DisplayName("Should return 400 when quantity is a string instead of a number")
+            @WithMockUser(roles = "USER")
+            void shouldReturn400_whenQuantityIsWrongType() throws Exception {
+                String badJson = "{ \"quantity\": \"not-a-number\" }";
+
+                mockMvc.perform(patch(getPatchUrl(VALID_PRODUCT_ID))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(badJson))
+                        .andExpect(status().isBadRequest());
+            }
+        }
+
+        // ==================== JSON RESPONSE STRUCTURE ====================
+
+        @Nested
+        @DisplayName("JSON response structure validation")
+        class JsonResponseStructure {
+
+            @Test
+            @DisplayName("Should return all expected fields in the success response")
+            @WithMockUser(roles = "USER")
+            void shouldReturnAllFieldsInResponse() throws Exception {
+                when(cartItemService.updateCartItem(eq(VALID_PRODUCT_ID), any(CartItemUpdateDTO.class)))
+                        .thenReturn(validUpdateResponse());
+
+                mockMvc.perform(patch(getPatchUrl(VALID_PRODUCT_ID))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(validUpdateRequest())))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.productId").exists())
+                        .andExpect(jsonPath("$.productTitle").isString())
+                        .andExpect(jsonPath("$.price").isNumber())
+                        .andExpect(jsonPath("$.isAvailable").isBoolean())
+                        .andExpect(jsonPath("$.quantity").isNumber());
+            }
+
+            @Test
+            @DisplayName("Error response should contain status, message, and timeStamp fields")
+            @WithMockUser(roles = "USER")
+            void shouldReturnErrorResponseStructure() throws Exception {
+                // Arrange — trigger a not-found error
+                when(cartItemService.updateCartItem(eq(VALID_PRODUCT_ID), any(CartItemUpdateDTO.class)))
+                        .thenThrow(new CustomerNotFoundException("Profile not found"));
+
+                // Act & Assert
+                mockMvc.perform(patch(getPatchUrl(VALID_PRODUCT_ID))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(validUpdateRequest())))
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.status").value(404))
+                        .andExpect(jsonPath("$.message").isNotEmpty())
+                        .andExpect(jsonPath("$.timeStamp").isNumber());
+            }
+        }
+
+        // ==================== EDGE CASES ====================
+
+        @Nested
+        @DisplayName("Edge cases")
+        class EdgeCases {
+
+            @Test
+            @DisplayName("Should ignore unknown fields in the request body and still succeed")
+            @WithMockUser(roles = "USER")
+            void shouldIgnoreUnknownFieldsInRequest() throws Exception {
+                when(cartItemService.updateCartItem(eq(VALID_PRODUCT_ID), any(CartItemUpdateDTO.class)))
+                        .thenReturn(validUpdateResponse());
+
+                String jsonWithExtraFields = """
+                        {
+                            "quantity": 5,
+                            "unknownField": "should be ignored"
+                        }
+                        """;
+
+                mockMvc.perform(patch(getPatchUrl(VALID_PRODUCT_ID))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(jsonWithExtraFields))
+                        .andExpect(status().isOk());
+            }
+
+            @Test
+            @DisplayName("Should return 200 when quantity is a large valid number (Integer.MAX_VALUE)")
+            @WithMockUser(roles = "USER")
+            void shouldReturn200_whenQuantityIsVeryLarge() throws Exception {
+                CartItemUpdateDTO request = new CartItemUpdateDTO(Integer.MAX_VALUE);
+                CartItemResponseDTO response = new CartItemResponseDTO(VALID_PRODUCT_ID, VALID_PRODUCT_TITLE, VALID_PRICE, VALID_IS_ACTIVE, Integer.MAX_VALUE);
+
+                when(cartItemService.updateCartItem(eq(VALID_PRODUCT_ID), any(CartItemUpdateDTO.class))).thenReturn(response);
+
+                mockMvc.perform(patch(getPatchUrl(VALID_PRODUCT_ID))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.quantity").value(Integer.MAX_VALUE));
             }
         }
     }
