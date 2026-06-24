@@ -2335,4 +2335,247 @@ class CartItemServiceImplTest {
             }
         }
     }
+
+    // ==================== deleteCartItem() ====================
+    @Nested
+    @DisplayName("deleteCartItem()")
+    class DeleteCartItem {
+
+        // ==================== deleteCartItem() — SUCCESS CASES ====================
+
+        @Nested
+        @DisplayName("deleteCartItem() — Success cases")
+        class DeleteCartItemSuccess {
+
+            @Test
+            @DisplayName("Should successfully delete cart item when it exists")
+            void shouldDeleteCartItem_whenItExists() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+                UUID cartItemId = UUID.randomUUID();
+
+                Product product = buildActiveProduct(productId, VALID_PRODUCT_STOCK);
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+                CartItem existingCartItem = buildSavedCartItem(cartItemId, product, customer.getCart(), VALID_REQUEST_QUANTITY);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findCartItem(productId, cartId)).thenReturn(Optional.of(existingCartItem));
+
+                // Act
+                cartItemService.deleteCartItem(productId);
+
+                // Assert
+                verify(cartItemRepository).delete(existingCartItem);
+                verifyNoMoreInteractions(cartItemRepository);
+            }
+
+            @Test
+            @DisplayName("Should call findByEmailWithCart with lowercase email")
+            void shouldCallFindByEmailWithCart_withLowercaseEmail() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                String upperCaseEmail = "JOHN.DOE@EXAMPLE.COM";
+                String expectedLowercaseEmail = "john.doe@example.com";
+
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+                UUID cartItemId = UUID.randomUUID();
+
+                Product product = buildActiveProduct(productId, VALID_PRODUCT_STOCK);
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+                CartItem existingCartItem = buildSavedCartItem(cartItemId, product, customer.getCart(), VALID_REQUEST_QUANTITY);
+
+                stubAuthenticatedUser(upperCaseEmail);
+
+                when(customerRepository.findByEmailWithCart(expectedLowercaseEmail)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findCartItem(productId, cartId)).thenReturn(Optional.of(existingCartItem));
+
+                // Act
+                cartItemService.deleteCartItem(productId);
+
+                // Assert
+                verify(customerRepository).findByEmailWithCart(expectedLowercaseEmail);
+            }
+
+            @Test
+            @DisplayName("Should verify the execution order: findCustomer → findCartItem → delete")
+            void shouldVerifyExecutionOrder() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+                UUID cartItemId = UUID.randomUUID();
+
+                Product product = buildActiveProduct(productId, VALID_PRODUCT_STOCK);
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+                CartItem existingCartItem = buildSavedCartItem(cartItemId, product, customer.getCart(), VALID_REQUEST_QUANTITY);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findCartItem(productId, cartId)).thenReturn(Optional.of(existingCartItem));
+
+                // Act
+                cartItemService.deleteCartItem(productId);
+
+                // Assert
+                var inOrderCustomer = inOrder(customerRepository);
+                inOrderCustomer.verify(customerRepository).findByEmailWithCart(VALID_EMAIL);
+
+                var inOrderCartItem = inOrder(cartItemRepository);
+                inOrderCartItem.verify(cartItemRepository).findCartItem(productId, cartId);
+                inOrderCartItem.verify(cartItemRepository).delete(existingCartItem);
+            }
+        }
+
+        // ==================== deleteCartItem() — NOT FOUND CASES ====================
+
+        @Nested
+        @DisplayName("deleteCartItem() — Not found cases")
+        class DeleteCartItemNotFound {
+
+            @Test
+            @DisplayName("Should throw CustomerNotFoundException when customer profile not found")
+            void shouldThrowCustomerNotFoundException_whenCustomerNotFound() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.empty());
+
+                // Act & Assert
+                CustomerNotFoundException exception = assertThrows(
+                        CustomerNotFoundException.class,
+                        () -> cartItemService.deleteCartItem(productId)
+                );
+
+                assertEquals("Profile not found", exception.getMessage());
+
+                verify(customerRepository).findByEmailWithCart(VALID_EMAIL);
+                verifyNoInteractions(cartItemRepository);
+            }
+
+            @Test
+            @DisplayName("Should throw CartItemNotFoundException when cart item does not exist")
+            void shouldThrowCartItemNotFoundException_whenCartItemNotFound() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findCartItem(productId, cartId)).thenReturn(Optional.empty());
+
+                // Act & Assert
+                CartItemNotFoundException exception = assertThrows(
+                        CartItemNotFoundException.class,
+                        () -> cartItemService.deleteCartItem(productId)
+                );
+
+                assertEquals("CartItem not found in your profile", exception.getMessage());
+
+                verify(cartItemRepository, never()).delete(any(CartItem.class));
+            }
+        }
+
+        // ==================== deleteCartItem() — SECURITY CONTEXT FAILURES ====================
+
+        @Nested
+        @DisplayName("deleteCartItem() — Security context failures")
+        class DeleteCartItemSecurityContextFailures {
+
+            @Test
+            @DisplayName("Should throw NullPointerException when SecurityContext has no Authentication")
+            void shouldThrowNPE_whenAuthenticationIsNull() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+
+                SecurityContext securityContext = mock(SecurityContext.class);
+                when(securityContext.getAuthentication()).thenReturn(null);
+                SecurityContextHolder.setContext(securityContext);
+
+                // Act & Assert
+                assertThrows(NullPointerException.class,
+                        () -> cartItemService.deleteCartItem(productId));
+
+                // Verify no repositories are called
+                verifyNoInteractions(customerRepository);
+                verifyNoInteractions(cartItemRepository);
+            }
+        }
+
+        // ==================== deleteCartItem() — SERVER FAILURE CASES ====================
+
+        @Nested
+        @DisplayName("deleteCartItem() — Server failure simulation")
+        class DeleteCartItemServerFailures {
+
+            @Test
+            @DisplayName("Should propagate RuntimeException when repository throws on delete")
+            void shouldPropagateException_whenRepositoryDeleteThrowsRuntimeException() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+                UUID cartItemId = UUID.randomUUID();
+
+                Product product = buildActiveProduct(productId, VALID_PRODUCT_STOCK);
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+                CartItem existingCartItem = buildSavedCartItem(cartItemId, product, customer.getCart(), VALID_REQUEST_QUANTITY);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findCartItem(productId, cartId)).thenReturn(Optional.of(existingCartItem));
+
+                doThrow(new RuntimeException("Database connection lost"))
+                        .when(cartItemRepository).delete(any(CartItem.class));
+
+                // Act & Assert
+                RuntimeException exception = assertThrows(
+                        RuntimeException.class,
+                        () -> cartItemService.deleteCartItem(productId)
+                );
+                assertEquals("Database connection lost", exception.getMessage());
+            }
+
+            @Test
+            @DisplayName("Should propagate IllegalStateException when repository throws on delete")
+            void shouldPropagateException_whenRepositoryDeleteThrowsIllegalStateException() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID customerId = UUID.randomUUID();
+                UUID cartId = UUID.randomUUID();
+                UUID cartItemId = UUID.randomUUID();
+
+                Product product = buildActiveProduct(productId, VALID_PRODUCT_STOCK);
+                Customer customer = buildCustomerWithCart(customerId, cartId);
+                CartItem existingCartItem = buildSavedCartItem(cartItemId, product, customer.getCart(), VALID_REQUEST_QUANTITY);
+
+                stubAuthenticatedUser(VALID_EMAIL);
+
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(cartItemRepository.findCartItem(productId, cartId)).thenReturn(Optional.of(existingCartItem));
+
+                doThrow(new IllegalStateException("Database connection lost"))
+                        .when(cartItemRepository).delete(any(CartItem.class));
+
+                // Act & Assert
+                IllegalStateException exception = assertThrows(
+                        IllegalStateException.class,
+                        () -> cartItemService.deleteCartItem(productId)
+                );
+                assertEquals("Database connection lost", exception.getMessage());
+            }
+        }
+    }
 }
