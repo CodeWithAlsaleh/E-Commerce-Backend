@@ -39,4 +39,11 @@ public class CartRestController {
                                                               @RequestBody @Valid CartItemUpdateDTO cartItemUpdateDTO) {
         return ResponseEntity.ok(cartItemService.updateCartItem(productId, cartItemUpdateDTO));
     }
+
+    @DeleteMapping("/items/{productId}")
+    public ResponseEntity<Void> deleteCartItem(@PathVariable UUID productId) {
+        cartItemService.deleteCartItem(productId);
+
+        return ResponseEntity.noContent().build();
+    }
 }
