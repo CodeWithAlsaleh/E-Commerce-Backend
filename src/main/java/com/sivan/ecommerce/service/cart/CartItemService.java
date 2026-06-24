@@ -14,4 +14,6 @@ public interface CartItemService {
     List<CartItemResponseDTO> getCartItems();
 
     CartItemResponseDTO updateCartItem(UUID productId, CartItemUpdateDTO cartItemUpdateDTO);
+
+    void deleteCartItem(UUID productId);
 }

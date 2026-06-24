@@ -127,4 +127,18 @@ public class CartItemServiceImpl implements CartItemService {
 
         return CartItemMapper.mapCartItemToCartItemResponse(cartItemRepository.save(cartItem));
     }
+
+    @Override
+    @Transactional
+    public void deleteCartItem(UUID productId) {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+
+        Customer customer = customerRepository.findByEmailWithCart(email.toLowerCase())
+                .orElseThrow(() -> new CustomerNotFoundException("Profile not found"));
+
+        CartItem cartItem = cartItemRepository.findCartItem(productId, customer.getCart().getId())
+                .orElseThrow(() -> new CartItemNotFoundException("CartItem not found in your profile"));
+
+        cartItemRepository.delete(cartItem);
+    }
 }
