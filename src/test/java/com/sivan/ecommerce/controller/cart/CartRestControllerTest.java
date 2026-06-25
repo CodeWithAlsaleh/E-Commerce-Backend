@@ -32,6 +32,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -1358,6 +1359,265 @@ class CartRestControllerTest {
                                 .content(objectMapper.writeValueAsString(request)))
                         .andExpect(status().isOk())
                         .andExpect(jsonPath("$.quantity").value(Integer.MAX_VALUE));
+            }
+        }
+    }
+
+    // ==================== deleteCartItem() ====================
+    @Nested
+    @DisplayName("deleteCartItem()")
+    class DeleteCartItem {
+
+        // ======================== Helpers ========================
+
+        private String getDeleteUrl(UUID productId) {
+            return CART_ITEMS_URL + "/" + productId;
+        }
+
+        private String getDeleteUrl(String productIdStr) {
+            return CART_ITEMS_URL + "/" + productIdStr;
+        }
+
+        // ==================== SUCCESS CASES (204) ====================
+
+        @Nested
+        @DisplayName("Success cases — 204 No Content")
+        class SuccessCases {
+
+            @Test
+            @DisplayName("Should return 204 when authenticated USER successfully deletes a cart item")
+            @WithMockUser(roles = "USER")
+            void shouldReturn204_whenUserDeletesCartItem() throws Exception {
+                doNothing().when(cartItemService).deleteCartItem(VALID_PRODUCT_ID);
+
+                mockMvc.perform(delete(getDeleteUrl(VALID_PRODUCT_ID)))
+                        .andExpect(status().isNoContent());
+
+                verify(cartItemService).deleteCartItem(VALID_PRODUCT_ID);
+            }
+
+            @Test
+            @DisplayName("Should return 204 when authenticated ADMIN (has ROLE_USER) successfully deletes a cart item")
+            @WithMockUser(roles = {"USER", "ADMIN"})
+            void shouldReturn204_whenAdminDeletesCartItem() throws Exception {
+                doNothing().when(cartItemService).deleteCartItem(VALID_PRODUCT_ID);
+
+                mockMvc.perform(delete(getDeleteUrl(VALID_PRODUCT_ID)))
+                        .andExpect(status().isNoContent());
+
+                verify(cartItemService).deleteCartItem(VALID_PRODUCT_ID);
+            }
+
+            @Test
+            @DisplayName("Should call cartItemService.deleteCartItem exactly once")
+            @WithMockUser(roles = "USER")
+            void shouldCallServiceExactlyOnce() throws Exception {
+                doNothing().when(cartItemService).deleteCartItem(VALID_PRODUCT_ID);
+
+                mockMvc.perform(delete(getDeleteUrl(VALID_PRODUCT_ID)))
+                        .andExpect(status().isNoContent());
+
+                verify(cartItemService).deleteCartItem(VALID_PRODUCT_ID);
+                verifyNoMoreInteractions(cartItemService);
+            }
+        }
+
+        // ==================== AUTHENTICATION FAILURES (401) ====================
+
+        @Nested
+        @DisplayName("Authentication failures — 401 Unauthorized")
+        class AuthenticationFailures {
+
+            @Test
+            @DisplayName("Should return 401 when no credentials are provided (anonymous)")
+            void shouldReturn401_whenNoCredentials() throws Exception {
+                mockMvc.perform(delete(getDeleteUrl(VALID_PRODUCT_ID)))
+                        .andExpect(status().isUnauthorized());
+
+                verifyNoInteractions(cartItemService);
+            }
+
+            @Test
+            @DisplayName("Should return 401 when invalid credentials are provided")
+            void shouldReturn401_whenInvalidCredentials() throws Exception {
+                mockMvc.perform(delete(getDeleteUrl(VALID_PRODUCT_ID))
+                                .with(httpBasic("wrong@email.com", "WrongPassword1!")))
+                        .andExpect(status().isUnauthorized());
+
+                verifyNoInteractions(cartItemService);
+            }
+        }
+
+        // ==================== AUTHORIZATION FAILURES (403) ====================
+
+        @Nested
+        @DisplayName("Authorization failures — 403 Forbidden")
+        class AuthorizationFailures {
+
+            @Test
+            @DisplayName("Should return 403 when authenticated user has ROLE_SYSTEM (not USER)")
+            @WithMockUser(roles = "SYSTEM")
+            void shouldReturn403_whenRoleIsAdmin() throws Exception {
+                mockMvc.perform(delete(getDeleteUrl(VALID_PRODUCT_ID)))
+                        .andExpect(status().isForbidden());
+
+                verifyNoInteractions(cartItemService);
+            }
+
+            @Test
+            @DisplayName("Should return 403 when user has no roles at all")
+            @WithMockUser(roles = {})
+            void shouldReturn403_whenUserHasNoRoles() throws Exception {
+                mockMvc.perform(delete(getDeleteUrl(VALID_PRODUCT_ID)))
+                        .andExpect(status().isForbidden());
+
+                verifyNoInteractions(cartItemService);
+            }
+        }
+
+        // ==================== VALIDATION FAILURES (400) ====================
+
+        @Nested
+        @DisplayName("Validation failures — 400 Bad Request")
+        class ValidationFailures {
+
+            @Test
+            @DisplayName("Should return 400 when productId is an invalid UUID format")
+            @WithMockUser(roles = "USER")
+            void shouldReturn400_whenProductIdIsInvalidUUID() throws Exception {
+                mockMvc.perform(delete(getDeleteUrl("not-a-valid-uuid")))
+                        .andExpect(status().isBadRequest());
+
+                verifyNoInteractions(cartItemService);
+            }
+
+            @Test
+            @DisplayName("Should return 400 when productId is empty")
+            @WithMockUser(roles = "USER")
+            void shouldReturn400_whenProductIdIsEmpty() throws Exception {
+                mockMvc.perform(delete(getDeleteUrl("   ")))
+                        .andExpect(status().isBadRequest());
+
+                verifyNoInteractions(cartItemService);
+            }
+
+            @Test
+            @DisplayName("Should return 404 when productId is missing")
+            @WithMockUser(roles = "USER")
+            void shouldReturn404_whenProductIdIsMissing() throws Exception {
+                mockMvc.perform(delete(getDeleteUrl("")))
+                        .andExpect(status().isNotFound());
+
+                verifyNoInteractions(cartItemService);
+            }
+        }
+
+        // ==================== NOT FOUND CASES (404) ====================
+
+        @Nested
+        @DisplayName("Not found cases — 404 Not Found")
+        class NotFoundCases {
+
+            @Test
+            @DisplayName("Should return 404 when cart item does not exist in user's profile")
+            @WithMockUser(roles = "USER")
+            void shouldReturn404_whenCartItemNotFound() throws Exception {
+                doThrow(new CartItemNotFoundException("CartItem not found in your profile"))
+                        .when(cartItemService).deleteCartItem(VALID_PRODUCT_ID);
+
+                mockMvc.perform(delete(getDeleteUrl(VALID_PRODUCT_ID)))
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.status").value(404))
+                        .andExpect(jsonPath("$.message").value("CartItem not found in your profile"));
+            }
+
+            @Test
+            @DisplayName("Should return 404 when customer profile is not found in database")
+            @WithMockUser(roles = "USER")
+            void shouldReturn404_whenCustomerNotFound() throws Exception {
+                doThrow(new CustomerNotFoundException("Profile not found"))
+                        .when(cartItemService).deleteCartItem(VALID_PRODUCT_ID);
+
+                mockMvc.perform(delete(getDeleteUrl(VALID_PRODUCT_ID)))
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.status").value(404))
+                        .andExpect(jsonPath("$.message").value("Profile not found"));
+            }
+        }
+
+        // ==================== SERVICE EXCEPTION HANDLING ====================
+
+        @Nested
+        @DisplayName("Service exception handling")
+        class ServiceExceptionHandling {
+
+            @Test
+            @DisplayName("Should return 500 when service throws an unexpected RuntimeException")
+            @WithMockUser(roles = "USER")
+            void shouldReturn500_whenServiceThrowsRuntimeException() throws Exception {
+                doThrow(new RuntimeException("Database connection lost"))
+                        .when(cartItemService).deleteCartItem(VALID_PRODUCT_ID);
+
+                mockMvc.perform(delete(getDeleteUrl(VALID_PRODUCT_ID)))
+                        .andExpect(status().isInternalServerError())
+                        .andExpect(jsonPath("$.status").value(500))
+                        .andExpect(jsonPath("$.message").value("An unexpected error occurred."));
+            }
+
+            @Test
+            @DisplayName("Should return 500 when service throws an unexpected IllegalStateException")
+            @WithMockUser(roles = "USER")
+            void shouldReturn500_whenServiceThrowsIllegalStateException() throws Exception {
+                doThrow(new IllegalStateException("Unexpected state"))
+                        .when(cartItemService).deleteCartItem(VALID_PRODUCT_ID);
+
+                mockMvc.perform(delete(getDeleteUrl(VALID_PRODUCT_ID)))
+                        .andExpect(status().isInternalServerError())
+                        .andExpect(jsonPath("$.status").value(500))
+                        .andExpect(jsonPath("$.message").value("An unexpected error occurred."));
+            }
+        }
+
+        // ==================== JSON RESPONSE STRUCTURE ====================
+
+        @Nested
+        @DisplayName("JSON response structure validation")
+        class JsonResponseStructure {
+
+            @Test
+            @DisplayName("Error response should contain status, message, and timeStamp fields")
+            @WithMockUser(roles = "USER")
+            void shouldReturnErrorResponseStructure() throws Exception {
+                // Arrange — trigger a not-found error
+                doThrow(new CartItemNotFoundException("CartItem not found in your profile"))
+                        .when(cartItemService).deleteCartItem(VALID_PRODUCT_ID);
+
+                // Act & Assert
+                mockMvc.perform(delete(getDeleteUrl(VALID_PRODUCT_ID)))
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.status").value(404))
+                        .andExpect(jsonPath("$.message").isNotEmpty())
+                        .andExpect(jsonPath("$.timeStamp").isNumber());
+            }
+        }
+
+        // ==================== EDGE CASES ====================
+
+        @Nested
+        @DisplayName("Edge cases")
+        class EdgeCases {
+
+            @Test
+            @DisplayName("Should return 204 when productId is sent with mixed casing (handled by Spring UUID conversion)")
+            @WithMockUser(roles = "USER")
+            void shouldReturn204_whenProductIdHasMixedCasing() throws Exception {
+                String mixedCaseUUID = VALID_PRODUCT_ID.toString().toUpperCase();
+                doNothing().when(cartItemService).deleteCartItem(any(UUID.class));
+
+                mockMvc.perform(delete(getDeleteUrl(mixedCaseUUID)))
+                        .andExpect(status().isNoContent());
+
+                verify(cartItemService).deleteCartItem(VALID_PRODUCT_ID);
             }
         }
     }
