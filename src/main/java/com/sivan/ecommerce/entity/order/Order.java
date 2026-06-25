@@ -27,6 +27,9 @@ public class Order extends BaseEntity {
     @Column(name = "shipping_address", length = 512, nullable = false)
     private String shippingAddress;
 
+    @Column(name = "idempotency_key", nullable = false)
+    private String idempotencyKey;
+
     /*
      *   Note:
      *
@@ -97,6 +100,14 @@ public class Order extends BaseEntity {
         this.shippingAddress = shippingAddress;
     }
 
+    public String getIdempotencyKey() {
+        return idempotencyKey;
+    }
+
+    public void setIdempotencyKey(String idempotencyKey) {
+        this.idempotencyKey = idempotencyKey;
+    }
+
     public Set<OrderItem> getOrderItems() {
         return orderItems;
     }
@@ -111,7 +122,8 @@ public class Order extends BaseEntity {
                 "status=" + status +
                 ", totalPrice=" + totalPrice +
                 ", shippingAddress='" + shippingAddress + '\'' +
-                '}' + super.toString();
+                ", idempotencyKey='" + idempotencyKey + '\'' +
+                '}';
     }
 
     @Override

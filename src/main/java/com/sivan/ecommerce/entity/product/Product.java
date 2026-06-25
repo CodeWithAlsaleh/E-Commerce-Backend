@@ -37,6 +37,10 @@ public class Product extends BaseEntity {
     @Column(name = "image_url", length = 512, nullable = false)
     private String imageUrl;
 
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     @Column(name = "is_active", nullable = false)
     private boolean isActive = true;
 
@@ -107,6 +111,14 @@ public class Product extends BaseEntity {
         this.imageUrl = imageUrl;
     }
 
+    public Long getVersion() {
+        return version;
+    }
+
+    public void setVersion(Long version) {
+        this.version = version;
+    }
+
     public boolean isActive() {
         return isActive;
     }
@@ -132,8 +144,9 @@ public class Product extends BaseEntity {
                 ", price=" + price +
                 ", currencyCode='" + currencyCode + '\'' +
                 ", imageUrl='" + imageUrl + '\'' +
+                ", version=" + version +
                 ", isActive=" + isActive +
-                '}' + super.toString();
+                '}';
     }
 
     @Override
