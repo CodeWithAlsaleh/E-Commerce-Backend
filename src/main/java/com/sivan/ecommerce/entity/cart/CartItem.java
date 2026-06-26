@@ -41,6 +41,10 @@ public class CartItem extends BaseEntity {
         this.quantity = quantity;
     }
 
+    public long calculateItemTotal() {
+        return this.quantity * this.product.getPrice();
+    }
+
     public Cart getCart() {
         return cart;
     }

@@ -1,0 +1,132 @@
+package com.sivan.ecommerce.service.order;
+
+import com.sivan.ecommerce.dto.order.OrderRequestDTO;
+import com.sivan.ecommerce.dto.order.OrderResponseDTO;
+import com.sivan.ecommerce.entity.cart.CartItem;
+import com.sivan.ecommerce.entity.customer.Customer;
+import com.sivan.ecommerce.entity.order.Order;
+import com.sivan.ecommerce.entity.order.OrderItem;
+import com.sivan.ecommerce.entity.order.Status;
+import com.sivan.ecommerce.entity.product.Product;
+import com.sivan.ecommerce.exception.CustomerNotFoundException;
+import com.sivan.ecommerce.exception.InsufficientStockException;
+import com.sivan.ecommerce.exception.InvalidDataException;
+import com.sivan.ecommerce.exception.ResourceConflictException;
+import com.sivan.ecommerce.mapper.order.OrderMapper;
+import com.sivan.ecommerce.repository.cart.CartItemRepository;
+import com.sivan.ecommerce.repository.customer.CustomerRepository;
+import com.sivan.ecommerce.repository.order.OrderRepository;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+
+@Service
+public class OrderServiceImpl implements OrderService {
+
+    private final OrderRepository orderRepository;
+    private final CustomerRepository customerRepository;
+    private final CartItemRepository cartItemRepository;
+
+    public OrderServiceImpl(OrderRepository orderRepository,
+                            CustomerRepository customerRepository,
+                            CartItemRepository cartItemRepository) {
+
+        this.orderRepository = orderRepository;
+        this.customerRepository = customerRepository;
+        this.cartItemRepository = cartItemRepository;
+    }
+
+    @Override
+    @Transactional
+    public OrderResponseDTO placeOrder(String idempotencyKey, OrderRequestDTO orderRequestDTO) {
+        Optional<Order> existingOrder = orderRepository.findByIdempotencyKey(idempotencyKey);
+
+        if (existingOrder.isPresent())
+            return OrderMapper.mapOrderToOrderResponse(existingOrder.get());
+
+        Customer customer = getCurrentCustomer();
+        List<CartItem> cartItems = getCartItems(customer);
+
+        validateCartIsNotEmpty(cartItems);
+        validateCartInventory(cartItems); // TODO: fix the error response structure
+
+        Order order = buildOrder(customer, cartItems, idempotencyKey, orderRequestDTO);
+
+        try {
+            orderRepository.save(order);
+            cartItemRepository.deleteAll(cartItems); // Don't forget to empty the cart!
+
+            return OrderMapper.mapOrderToOrderResponse(order);
+        } catch (DataIntegrityViolationException exception) {
+            // The exact-millisecond race condition happened.
+            // Throw a conflict so the frontend can automatically retry (which will hit Step 1 safely).
+            throw new ResourceConflictException("Order is currently processing. Please refresh");
+        } catch (ObjectOptimisticLockingFailureException exception) {
+            // Use Spring's ObjectOptimisticLockingFailureException, not Hibernate's OptimisticEntityLockException
+            throw new ResourceConflictException("Inventory was updated by another user. Please try again");
+        }
+    }
+
+    private Customer getCurrentCustomer() {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+
+        return customerRepository.findByEmailWithCart(email.toLowerCase())
+                .orElseThrow(() -> new CustomerNotFoundException("Profile not found"));
+    }
+
+    private List<CartItem> getCartItems(Customer customer) {
+        return cartItemRepository.findAllByCartIdWithProduct(customer.getCart().getId());
+    }
+
+    private void validateCartIsNotEmpty(List<CartItem> cartItems) {
+        if (cartItems.isEmpty())
+            throw new InvalidDataException("Cannot place an order with an empty cart");
+    }
+
+    private void validateCartInventory(List<CartItem> cartItems) {
+        List<String> outOfStockErrors = new ArrayList<>();
+
+        for (CartItem cartItem : cartItems) {
+            Product product = cartItem.getProduct();
+
+            if (!product.isActive())
+                outOfStockErrors.add(product.getTitle() + " is no longer available.");
+            else if (cartItem.getQuantity() > product.getQuantity())
+                outOfStockErrors.add(product.getTitle() + " has insufficient stock. Only " + product.getQuantity() + " left");
+        }
+
+        // If we collected ANY errors, throw them all at once!
+        if (!outOfStockErrors.isEmpty()) {
+            // String.join will combine the list into a single sentence separated by ","
+            throw new InsufficientStockException(String.join(",", outOfStockErrors));
+        }
+    }
+
+    private Order buildOrder(Customer customer,
+                             List<CartItem> cartItems,
+                             String idempotencyKey,
+                             OrderRequestDTO orderRequestDTO) {
+
+        long totalPrice = 0;
+        Order order = new Order(customer, Status.PENDING, 0, orderRequestDTO.shippingAddress());
+
+        for (CartItem cartItem : cartItems) {
+            totalPrice += cartItem.calculateItemTotal();
+
+            cartItem.getProduct().setQuantity(cartItem.getProduct().getQuantity() - cartItem.getQuantity());
+
+            order.addOrderItem(new OrderItem(order, cartItem.getProduct(), cartItem.getQuantity(), cartItem.getProduct().getPrice()));
+        }
+
+        order.setTotalPrice(totalPrice);
+        order.setIdempotencyKey(idempotencyKey);
+
+        return order;
+    }
+}
