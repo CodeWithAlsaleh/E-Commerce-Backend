@@ -4,10 +4,13 @@ import com.sivan.ecommerce.exception.InvalidDataException;
 import com.sivan.ecommerce.exception.ResourceConflictException;
 import com.sivan.ecommerce.exception.ResourceNotFoundException;
 import com.sivan.ecommerce.response.ErrorResponse;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.ConstraintViolationException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpInputMessage;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -16,13 +19,17 @@ import org.springframework.validation.BeanPropertyBindingResult;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingPathVariableException;
+import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import org.springframework.http.HttpMethod;
 
+import java.util.Set;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * Unit tests for {@link GlobalExceptionHandler}.
@@ -549,6 +556,85 @@ class GlobalExceptionHandlerTest {
         }
     }
 
+    // ==================== MissingRequestHeaderException (400) ====================
+
+    @Nested
+    @DisplayName("MissingRequestHeaderException → 400")
+    class MissingRequestHeaderExceptionHandler {
+
+        @Test
+        @DisplayName("Should return 400 with missing header message")
+        void shouldReturn400_withMissingHeaderMessage() throws NoSuchMethodException {
+            // Arrange
+            MethodParameter methodParameter = new MethodParameter(
+                    this.getClass().getDeclaredMethod("shouldReturn400_withMissingHeaderMessage"), -1
+            );
+            MissingRequestHeaderException exception =
+                    new MissingRequestHeaderException("Authorization", methodParameter);
+
+            // Act
+            ResponseEntity<ErrorResponse> response = handler.handleException(exception);
+
+            // Assert
+            assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+            assertNotNull(response.getBody());
+            assertEquals(400, response.getBody().getStatus());
+            assertEquals("Required header is missing: Authorization", response.getBody().getMessage());
+        }
+    }
+
+    // ==================== ConstraintViolationException (400) ====================
+
+    @Nested
+    @DisplayName("ConstraintViolationException → 400")
+    class ConstraintViolationExceptionHandler {
+
+        @Test
+        @DisplayName("Should return 400 with a single constraint violation message")
+        void shouldReturn400_withSingleConstraintViolation() {
+            // Arrange
+            ConstraintViolation<?> violation = mock(ConstraintViolation.class);
+            when(violation.getMessage()).thenReturn("must not be null");
+
+            ConstraintViolationException exception =
+                    new ConstraintViolationException(java.util.Set.of(violation));
+
+            // Act
+            ResponseEntity<ErrorResponse> response = handler.handleException(exception);
+
+            // Assert
+            assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+            assertNotNull(response.getBody());
+            assertEquals(400, response.getBody().getStatus());
+            assertEquals("must not be null", response.getBody().getMessage());
+        }
+
+        @Test
+        @DisplayName("Should join multiple constraint violations with comma separator")
+        void shouldJoinMultipleConstraintViolations_withComma() {
+            // Arrange
+            ConstraintViolation<?> violation1 = mock(ConstraintViolation.class);
+            when(violation1.getMessage()).thenReturn("must not be null");
+
+            ConstraintViolation<?> violation2 = mock(ConstraintViolation.class);
+            when(violation2.getMessage()).thenReturn("size must be between 1 and 50");
+
+            ConstraintViolationException exception =
+                    new ConstraintViolationException(
+                            new java.util.LinkedHashSet<>(java.util.List.of(violation1, violation2)));
+
+            // Act
+            ResponseEntity<ErrorResponse> response = handler.handleException(exception);
+
+            // Assert
+            assertNotNull(response.getBody());
+            String message = response.getBody().getMessage();
+            assertTrue(message.contains("must not be null"));
+            assertTrue(message.contains("size must be between 1 and 50"));
+            assertTrue(message.contains(", "), "Errors should be comma-separated");
+        }
+    }
+
     // ==================== Error Response Structure ====================
 
     @Nested
@@ -578,6 +664,18 @@ class GlobalExceptionHandlerTest {
             ResponseEntity<ErrorResponse> response409 =
                     handler.handleException(new ResourceConflictException("duplicate"));
             assertValidErrorResponse(response409, 409);
+
+            // 400 — MissingRequestHeader
+            ResponseEntity<ErrorResponse> responseHeader =
+                    handler.handleException(new MissingRequestHeaderException("Authorization", mock(org.springframework.core.MethodParameter.class)));
+            assertValidErrorResponse(responseHeader, 400);
+
+            // 400 — ConstraintViolation
+            jakarta.validation.ConstraintViolation<?> violation = mock(jakarta.validation.ConstraintViolation.class);
+            when(violation.getMessage()).thenReturn("error");
+            ResponseEntity<ErrorResponse> responseConstraint =
+                    handler.handleException(new jakarta.validation.ConstraintViolationException(java.util.Set.of(violation)));
+            assertValidErrorResponse(responseConstraint, 400);
         }
 
         @Test
@@ -605,6 +703,20 @@ class GlobalExceptionHandlerTest {
                     handler.handleException(new ResourceConflictException("err"));
             assertNotNull(response409.getBody());
             assertEquals(response409.getStatusCode().value(), response409.getBody().getStatus());
+
+            // 400 - MissingRequestHeader
+            ResponseEntity<ErrorResponse> responseHeader =
+                    handler.handleException(new MissingRequestHeaderException("Authorization", mock(org.springframework.core.MethodParameter.class)));
+            assertNotNull(responseHeader.getBody());
+            assertEquals(responseHeader.getStatusCode().value(), responseHeader.getBody().getStatus());
+
+            // 400 - ConstraintViolation
+            ConstraintViolation<?> violation = mock(ConstraintViolation.class);
+            when(violation.getMessage()).thenReturn("error");
+            ResponseEntity<ErrorResponse> responseConstraint =
+                    handler.handleException(new ConstraintViolationException(Set.of(violation)));
+            assertNotNull(responseConstraint.getBody());
+            assertEquals(responseConstraint.getStatusCode().value(), responseConstraint.getBody().getStatus());
         }
 
         private void assertValidErrorResponse(ResponseEntity<ErrorResponse> response, int expectedStatus) {
