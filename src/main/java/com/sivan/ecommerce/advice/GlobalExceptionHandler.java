@@ -4,11 +4,14 @@ import com.sivan.ecommerce.exception.InvalidDataException;
 import com.sivan.ecommerce.exception.ResourceConflictException;
 import com.sivan.ecommerce.exception.ResourceNotFoundException;
 import com.sivan.ecommerce.response.ErrorResponse;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingPathVariableException;
+import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
@@ -58,6 +61,23 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<ErrorResponse> handleException(NoResourceFoundException exception) {
         return buildError(HttpStatus.NOT_FOUND, "The requested API endpoint does not exist. Please verify the URL path and HTTP method.");
+    }
+
+    @ExceptionHandler(MissingRequestHeaderException.class)
+    public ResponseEntity<ErrorResponse> handleException(MissingRequestHeaderException exception) {
+        return buildError(HttpStatus.BAD_REQUEST, "Required header is missing: " + exception.getHeaderName());
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ErrorResponse> handleException(ConstraintViolationException exception) {
+
+        // Extract and join all validation messages separated by a comma
+        String errorMessage = exception.getConstraintViolations()
+                .stream()
+                .map(ConstraintViolation::getMessage)
+                .collect(Collectors.joining(", "));
+
+        return buildError(HttpStatus.BAD_REQUEST, errorMessage);
     }
 
     // ==================== Custom exceptions ====================
