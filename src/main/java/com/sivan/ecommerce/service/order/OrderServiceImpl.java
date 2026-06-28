@@ -59,10 +59,20 @@ public class OrderServiceImpl implements OrderService {
         Order order = buildOrder(customer, cartItems, idempotencyKey, orderRequestDTO);
 
         try {
-            orderRepository.save(order);
-            cartItemRepository.deleteAll(cartItems); // Don't forget to empty the cart!
+            /*
+             *   Flush here will force hibernate to run interceptors and synchronize timestamps.
+             *
+             *   Also:
+             *       Force Hibernate to execute queued SQL now instead of waiting until transaction commit.
+             *       This ensures database exceptions are thrown here, where they can be caught and mapped
+             *       to meaningful business exceptions.
+             * */
+            Order savedOrder = orderRepository.saveAndFlush(order);
 
-            return OrderMapper.mapOrderToOrderResponse(order);
+            // TODO: This will hit the DB with len(cartItems) delete queries "Fix it later"
+            cartItemRepository.deleteAll(cartItems);
+
+            return OrderMapper.mapOrderToOrderResponse(savedOrder);
         } catch (DataIntegrityViolationException exception) {
             // The exact-millisecond race condition happened.
             // Throw a conflict so the frontend can automatically retry (which will hit Step 1 safely).

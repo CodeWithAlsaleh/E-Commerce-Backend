@@ -2,6 +2,7 @@ package com.sivan.ecommerce.entity;
 
 import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.SourceType;
 import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.annotations.UuidGenerator;
 
@@ -86,11 +87,11 @@ public abstract class BaseEntity {
     @Column(name = "id", updatable = false, nullable = false)
     private UUID id;
 
-    @CreationTimestamp
+    @CreationTimestamp(source = SourceType.VM)
     @Column(name = "created_at", updatable = false, nullable = false)
     private Instant createdAt;
 
-    @UpdateTimestamp
+    @UpdateTimestamp(source = SourceType.VM)
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
