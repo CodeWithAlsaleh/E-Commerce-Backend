@@ -1,7 +1,9 @@
 package com.sivan.ecommerce.service.order;
 
+import com.sivan.ecommerce.dto.order.OrderFilterDTO;
 import com.sivan.ecommerce.dto.order.OrderRequestDTO;
 import com.sivan.ecommerce.dto.order.OrderResponseDTO;
+import com.sivan.ecommerce.dto.order.OrderSummaryResponseDTO;
 import com.sivan.ecommerce.entity.cart.CartItem;
 import com.sivan.ecommerce.entity.customer.Customer;
 import com.sivan.ecommerce.entity.order.Order;
@@ -17,6 +19,10 @@ import com.sivan.ecommerce.repository.cart.CartItemRepository;
 import com.sivan.ecommerce.repository.customer.CustomerRepository;
 import com.sivan.ecommerce.repository.order.OrderRepository;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -25,6 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 @Service
 public class OrderServiceImpl implements OrderService {
@@ -32,6 +39,8 @@ public class OrderServiceImpl implements OrderService {
     private final OrderRepository orderRepository;
     private final CustomerRepository customerRepository;
     private final CartItemRepository cartItemRepository;
+
+    private static final Set<String> ALLOWED_SORTS = Set.of("totalPrice", "createdAt");
 
     public OrderServiceImpl(OrderRepository orderRepository,
                             CustomerRepository customerRepository,
@@ -81,6 +90,28 @@ public class OrderServiceImpl implements OrderService {
             // Use Spring's ObjectOptimisticLockingFailureException, not Hibernate's OptimisticEntityLockException
             throw new ResourceConflictException("Inventory was updated by another user. Please try again");
         }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<OrderSummaryResponseDTO> getOrders(OrderFilterDTO orderFilterDTO, Pageable pageable) {
+        Customer customer = getCurrentCustomer();
+
+        for (Sort.Order order : pageable.getSort()) {
+            // Throwing InvalidDataException tells Spring "The client sent bad data"
+            if (!ALLOWED_SORTS.contains(order.getProperty()))
+                throw new InvalidDataException("Sorting by '" + order.getProperty() + "' is not allowed");
+        }
+
+        if (pageable.getSort().isUnsorted()) {
+            pageable = PageRequest.of(
+                    pageable.getPageNumber(),
+                    pageable.getPageSize(),
+                    Sort.by("createdAt").descending()
+            );
+        }
+
+        return orderRepository.findByFilters(customer.getId(), orderFilterDTO.status(), pageable);
     }
 
     private Customer getCurrentCustomer() {
