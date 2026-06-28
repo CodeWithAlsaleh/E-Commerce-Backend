@@ -196,7 +196,7 @@ class OrderServiceImplTest {
         StubResult result = stubPlaceOrderBase();
 
         // save() returns the order as-is (the service builds and passes it)
-        when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(orderRepository.saveAndFlush(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
 
         return result;
     }
@@ -276,7 +276,7 @@ class OrderServiceImplTest {
 
                 // Assert — only findByIdempotencyKey should have been called
                 verify(orderRepository).findByIdempotencyKey(VALID_IDEMPOTENCY_KEY);
-                verify(orderRepository, never()).save(any(Order.class));
+                verify(orderRepository, never()).saveAndFlush(any(Order.class));
                 verifyNoInteractions(customerRepository);
                 verifyNoInteractions(cartItemRepository);
             }
@@ -341,7 +341,7 @@ class OrderServiceImplTest {
                 when(orderRepository.findByIdempotencyKey(VALID_IDEMPOTENCY_KEY)).thenReturn(Optional.empty());
                 when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
                 when(cartItemRepository.findAllByCartIdWithProduct(cartId)).thenReturn(cartItems);
-                when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+                when(orderRepository.saveAndFlush(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
 
                 // Expected: (2 × 2500) + (1 × 8000) = 5000 + 8000 = 13000
                 long expectedTotal = (2 * 2500L) + (1 * 8000L);
@@ -389,7 +389,7 @@ class OrderServiceImplTest {
                 when(orderRepository.findByIdempotencyKey(VALID_IDEMPOTENCY_KEY)).thenReturn(Optional.empty());
                 when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
                 when(cartItemRepository.findAllByCartIdWithProduct(cartId)).thenReturn(cartItems);
-                when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+                when(orderRepository.saveAndFlush(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
 
                 // Act
                 orderService.placeOrder(VALID_IDEMPOTENCY_KEY, validRequest());
@@ -422,7 +422,7 @@ class OrderServiceImplTest {
                 orderService.placeOrder(VALID_IDEMPOTENCY_KEY, validRequest());
 
                 // Assert
-                verify(orderRepository).save(any(Order.class));
+                verify(orderRepository).saveAndFlush(any(Order.class));
             }
 
             @Test
@@ -431,7 +431,7 @@ class OrderServiceImplTest {
                 // Arrange
                 stubPlaceOrderBase();
 
-                when(orderRepository.save(any(Order.class))).thenAnswer(inv -> {
+                when(orderRepository.saveAndFlush(any(Order.class))).thenAnswer(inv -> {
                     Order capturedOrder = inv.getArgument(0);
 
                     // Verify the idempotency key was set before save
@@ -444,7 +444,7 @@ class OrderServiceImplTest {
                 orderService.placeOrder(VALID_IDEMPOTENCY_KEY, validRequest());
 
                 // Assert
-                verify(orderRepository).save(any(Order.class));
+                verify(orderRepository).saveAndFlush(any(Order.class));
             }
 
             @Test
@@ -495,7 +495,7 @@ class OrderServiceImplTest {
                 when(orderRepository.findByIdempotencyKey(VALID_IDEMPOTENCY_KEY)).thenReturn(Optional.empty());
                 when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
                 when(cartItemRepository.findAllByCartIdWithProduct(cartId)).thenReturn(cartItems);
-                when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+                when(orderRepository.saveAndFlush(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
 
                 // Act
                 OrderResponseDTO response = orderService.placeOrder(VALID_IDEMPOTENCY_KEY, validRequest());
@@ -536,7 +536,7 @@ class OrderServiceImplTest {
                 // Assert — verify the order: findByIdempotencyKey is called before save
                 var inOrder = inOrder(orderRepository);
                 inOrder.verify(orderRepository).findByIdempotencyKey(VALID_IDEMPOTENCY_KEY);
-                inOrder.verify(orderRepository).save(any(Order.class));
+                inOrder.verify(orderRepository).saveAndFlush(any(Order.class));
             }
 
             @Test
@@ -554,7 +554,7 @@ class OrderServiceImplTest {
                 inOrder.verify(orderRepository).findByIdempotencyKey(VALID_IDEMPOTENCY_KEY);
                 inOrder.verify(customerRepository).findByEmailWithCart(VALID_EMAIL.toLowerCase());
                 inOrder.verify(cartItemRepository).findAllByCartIdWithProduct(any(UUID.class));
-                inOrder.verify(orderRepository).save(any(Order.class));
+                inOrder.verify(orderRepository).saveAndFlush(any(Order.class));
                 inOrder.verify(cartItemRepository).deleteAll(anyList());
             }
         }
@@ -583,7 +583,7 @@ class OrderServiceImplTest {
                 when(orderRepository.findByIdempotencyKey(VALID_IDEMPOTENCY_KEY)).thenReturn(Optional.empty());
                 when(customerRepository.findByEmailWithCart("john.doe@example.com")).thenReturn(Optional.of(customer));
                 when(cartItemRepository.findAllByCartIdWithProduct(cartId)).thenReturn(List.of(cartItem));
-                when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+                when(orderRepository.saveAndFlush(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
 
                 // Act
                 OrderResponseDTO response = orderService.placeOrder(VALID_IDEMPOTENCY_KEY, validRequest());
@@ -629,7 +629,7 @@ class OrderServiceImplTest {
                         () -> orderService.placeOrder(VALID_IDEMPOTENCY_KEY, validRequest()));
 
                 // Assert
-                verify(orderRepository, never()).save(any(Order.class));
+                verify(orderRepository, never()).saveAndFlush(any(Order.class));
                 verifyNoInteractions(cartItemRepository);
             }
         }
@@ -681,7 +681,7 @@ class OrderServiceImplTest {
                         () -> orderService.placeOrder(VALID_IDEMPOTENCY_KEY, validRequest()));
 
                 // Assert
-                verify(orderRepository, never()).save(any(Order.class));
+                verify(orderRepository, never()).saveAndFlush(any(Order.class));
                 verify(cartItemRepository, never()).deleteAll(anyList());
             }
         }
@@ -809,7 +809,7 @@ class OrderServiceImplTest {
                         () -> orderService.placeOrder(VALID_IDEMPOTENCY_KEY, validRequest()));
 
                 // Assert
-                verify(orderRepository, never()).save(any(Order.class));
+                verify(orderRepository, never()).saveAndFlush(any(Order.class));
                 verify(cartItemRepository, never()).deleteAll(anyList());
             }
         }
@@ -837,7 +837,7 @@ class OrderServiceImplTest {
                 when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
                 when(cartItemRepository.findAllByCartIdWithProduct(cartId)).thenReturn(List.of(cartItem));
 
-                when(orderRepository.save(any(Order.class)))
+                when(orderRepository.saveAndFlush(any(Order.class)))
                         .thenThrow(new DataIntegrityViolationException("Duplicate idempotency key"));
 
                 // Act & Assert
@@ -865,7 +865,7 @@ class OrderServiceImplTest {
                 when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
                 when(cartItemRepository.findAllByCartIdWithProduct(cartId)).thenReturn(List.of(cartItem));
 
-                when(orderRepository.save(any(Order.class)))
+                when(orderRepository.saveAndFlush(any(Order.class)))
                         .thenThrow(new ObjectOptimisticLockingFailureException(Order.class, "version conflict"));
 
                 // Act & Assert
@@ -893,7 +893,7 @@ class OrderServiceImplTest {
                 when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
                 when(cartItemRepository.findAllByCartIdWithProduct(cartId)).thenReturn(List.of(cartItem));
 
-                when(orderRepository.save(any(Order.class)))
+                when(orderRepository.saveAndFlush(any(Order.class)))
                         .thenThrow(new DataIntegrityViolationException("Duplicate"));
 
                 // Act
@@ -921,7 +921,7 @@ class OrderServiceImplTest {
                 when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
                 when(cartItemRepository.findAllByCartIdWithProduct(cartId)).thenReturn(List.of(cartItem));
 
-                when(orderRepository.save(any(Order.class)))
+                when(orderRepository.saveAndFlush(any(Order.class)))
                         .thenThrow(new ObjectOptimisticLockingFailureException(Order.class, "version conflict"));
 
                 // Act
@@ -956,7 +956,7 @@ class OrderServiceImplTest {
                 // Verify no business operations occurred
                 verifyNoInteractions(customerRepository);
                 verifyNoInteractions(cartItemRepository);
-                verify(orderRepository, never()).save(any(Order.class));
+                verify(orderRepository, never()).saveAndFlush(any(Order.class));
             }
         }
 
@@ -1089,7 +1089,7 @@ class OrderServiceImplTest {
                 // Arrange
                 StubResult stub = stubPlaceOrderBase();
 
-                when(orderRepository.save(any(Order.class))).thenAnswer(inv -> {
+                when(orderRepository.saveAndFlush(any(Order.class))).thenAnswer(inv -> {
                     Order capturedOrder = inv.getArgument(0);
 
                     // Verify the order was built correctly before save
@@ -1107,7 +1107,7 @@ class OrderServiceImplTest {
                 orderService.placeOrder(VALID_IDEMPOTENCY_KEY, validRequest());
 
                 // Assert
-                verify(orderRepository).save(any(Order.class));
+                verify(orderRepository).saveAndFlush(any(Order.class));
             }
 
             @Test
@@ -1116,7 +1116,7 @@ class OrderServiceImplTest {
                 // Arrange
                 stubPlaceOrderBase();
 
-                when(orderRepository.save(any(Order.class))).thenAnswer(inv -> {
+                when(orderRepository.saveAndFlush(any(Order.class))).thenAnswer(inv -> {
                     Order capturedOrder = inv.getArgument(0);
 
                     // Verify the order item's locked price matches the product price at order time
@@ -1133,7 +1133,7 @@ class OrderServiceImplTest {
                 orderService.placeOrder(VALID_IDEMPOTENCY_KEY, validRequest());
 
                 // Assert
-                verify(orderRepository).save(any(Order.class));
+                verify(orderRepository).saveAndFlush(any(Order.class));
             }
         }
 
@@ -1160,7 +1160,7 @@ class OrderServiceImplTest {
                 when(orderRepository.findByIdempotencyKey(VALID_IDEMPOTENCY_KEY)).thenReturn(Optional.empty());
                 when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
                 when(cartItemRepository.findAllByCartIdWithProduct(cartId)).thenReturn(List.of(cartItem));
-                when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+                when(orderRepository.saveAndFlush(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
 
                 // Act — should NOT throw because quantity == stock
                 OrderResponseDTO response = orderService.placeOrder(VALID_IDEMPOTENCY_KEY, validRequest());
