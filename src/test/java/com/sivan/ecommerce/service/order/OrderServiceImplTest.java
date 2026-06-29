@@ -1,8 +1,10 @@
 package com.sivan.ecommerce.service.order;
 
+import com.sivan.ecommerce.dto.order.OrderFilterDTO;
 import com.sivan.ecommerce.dto.order.OrderItemResponseDTO;
 import com.sivan.ecommerce.dto.order.OrderRequestDTO;
 import com.sivan.ecommerce.dto.order.OrderResponseDTO;
+import com.sivan.ecommerce.dto.order.OrderSummaryResponseDTO;
 import com.sivan.ecommerce.entity.EntityTestUtil;
 import com.sivan.ecommerce.entity.cart.Cart;
 import com.sivan.ecommerce.entity.cart.CartItem;
@@ -32,10 +34,17 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -1211,6 +1220,699 @@ class OrderServiceImplTest {
                 assertNotNull(response);
                 assertEquals(1, response.orderItems().size());
                 assertEquals((long) CART_ITEM_QUANTITY * PRODUCT_PRICE, response.totalPrice());
+            }
+        }
+    }
+
+    // ==================== getOrders() ====================
+    @Nested
+    @DisplayName("getOrders()")
+    class GetOrders {
+
+        // ==================== getOrders() — SUCCESS CASES ====================
+
+        @Nested
+        @DisplayName("getOrders() — Success cases")
+        class GetOrdersSuccess {
+
+            @Test
+            @DisplayName("Should return a page of OrderSummaryResponseDTO when valid request is made")
+            void shouldReturnPageOfOrderSummaries_whenValidRequestIsMade() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+
+                OrderSummaryResponseDTO summary = new OrderSummaryResponseDTO(
+                        UUID.randomUUID(), Status.PENDING, 7500L,
+                        VALID_SHIPPING_ADDRESS, Instant.now()
+                );
+                Page<OrderSummaryResponseDTO> expectedPage = new PageImpl<>(
+                        List.of(summary), PageRequest.of(0, 10, Sort.by("createdAt").descending()), 1
+                );
+
+                OrderFilterDTO filter = new OrderFilterDTO(null);
+                Pageable pageable = PageRequest.of(0, 10);
+
+                when(orderRepository.findByFilters(customerId, null, PageRequest.of(0, 10, Sort.by("createdAt").descending())))
+                        .thenReturn(expectedPage);
+
+                // Act
+                Page<OrderSummaryResponseDTO> result = orderService.getOrders(filter, pageable);
+
+                // Assert
+                assertNotNull(result);
+                assertEquals(1, result.getTotalElements());
+                assertEquals(1, result.getContent().size());
+
+                OrderSummaryResponseDTO returned = result.getContent().get(0);
+                assertEquals(summary.id(), returned.id());
+                assertEquals(Status.PENDING, returned.status());
+                assertEquals(7500L, returned.totalPrice());
+                assertEquals(VALID_SHIPPING_ADDRESS, returned.shippingAddress());
+            }
+
+            @Test
+            @DisplayName("Should filter orders by status when status is provided")
+            void shouldFilterOrdersByStatus_whenStatusIsProvided() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+
+                OrderSummaryResponseDTO shippedOrder = new OrderSummaryResponseDTO(
+                        UUID.randomUUID(), Status.SHIPPED, 15000L,
+                        VALID_SHIPPING_ADDRESS, Instant.now()
+                );
+                Pageable pageable = PageRequest.of(0, 10, Sort.by("createdAt").descending());
+                Page<OrderSummaryResponseDTO> expectedPage = new PageImpl<>(
+                        List.of(shippedOrder), pageable, 1
+                );
+
+                OrderFilterDTO filter = new OrderFilterDTO(Status.SHIPPED);
+
+                when(orderRepository.findByFilters(customerId, Status.SHIPPED, pageable))
+                        .thenReturn(expectedPage);
+
+                // Act
+                Page<OrderSummaryResponseDTO> result = orderService.getOrders(filter, pageable);
+
+                // Assert
+                assertEquals(1, result.getTotalElements());
+                assertEquals(Status.SHIPPED, result.getContent().get(0).status());
+
+                verify(orderRepository).findByFilters(customerId, Status.SHIPPED, pageable);
+            }
+
+            @Test
+            @DisplayName("Should pass null status to repository when no status filter is provided")
+            void shouldPassNullStatus_whenNoFilterProvided() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+
+                OrderFilterDTO filter = new OrderFilterDTO(null);
+                Pageable defaultSorted = PageRequest.of(0, 10, Sort.by("createdAt").descending());
+
+                when(orderRepository.findByFilters(customerId, null, defaultSorted))
+                        .thenReturn(Page.empty(defaultSorted));
+
+                // Act
+                orderService.getOrders(filter, PageRequest.of(0, 10));
+
+                // Assert
+                verify(orderRepository).findByFilters(customerId, null, defaultSorted);
+            }
+        }
+
+        // ==================== getOrders() — DEFAULT SORTING ====================
+
+        @Nested
+        @DisplayName("getOrders() — Default sorting")
+        class GetOrdersDefaultSorting {
+
+            @Test
+            @DisplayName("Should apply default sorting by createdAt descending when pageable is unsorted")
+            void shouldApplyDefaultSorting_whenPageableIsUnsorted() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+
+                OrderFilterDTO filter = new OrderFilterDTO(null);
+                Pageable unsortedPageable = PageRequest.of(0, 10);
+
+                Pageable expectedPageable = PageRequest.of(0, 10, Sort.by("createdAt").descending());
+                when(orderRepository.findByFilters(customerId, null, expectedPageable))
+                        .thenReturn(Page.empty(expectedPageable));
+
+                // Act
+                orderService.getOrders(filter, unsortedPageable);
+
+                // Assert — verify the pageable passed to repository has default sort
+                verify(orderRepository).findByFilters(customerId, null, expectedPageable);
+            }
+
+            @Test
+            @DisplayName("Should preserve explicit sorting when pageable is already sorted")
+            void shouldPreserveExplicitSorting_whenPageableIsSorted() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+
+                OrderFilterDTO filter = new OrderFilterDTO(null);
+                Pageable sortedPageable = PageRequest.of(0, 10, Sort.by("totalPrice").ascending());
+
+                when(orderRepository.findByFilters(customerId, null, sortedPageable))
+                        .thenReturn(Page.empty(sortedPageable));
+
+                // Act
+                orderService.getOrders(filter, sortedPageable);
+
+                // Assert — the original sort should be preserved, NOT overridden
+                verify(orderRepository).findByFilters(customerId, null, sortedPageable);
+            }
+
+            @Test
+            @DisplayName("Should preserve page number and page size when applying default sort")
+            void shouldPreservePageNumberAndSize_whenApplyingDefaultSort() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+
+                OrderFilterDTO filter = new OrderFilterDTO(null);
+                // Request page 3 with size 5, unsorted
+                Pageable unsortedPageable = PageRequest.of(3, 5);
+
+                Pageable expectedPageable = PageRequest.of(3, 5, Sort.by("createdAt").descending());
+                when(orderRepository.findByFilters(customerId, null, expectedPageable))
+                        .thenReturn(Page.empty(expectedPageable));
+
+                // Act
+                orderService.getOrders(filter, unsortedPageable);
+
+                // Assert — page number and size must survive the default sort application
+                verify(orderRepository).findByFilters(customerId, null, expectedPageable);
+            }
+        }
+
+        // ==================== getOrders() — SORT VALIDATION (InvalidDataException) ====================
+
+        @Nested
+        @DisplayName("getOrders() — Sort validation")
+        class GetOrdersSortValidation {
+
+            @Test
+            @DisplayName("Should throw InvalidDataException when sorting by a disallowed property")
+            void shouldThrowInvalidDataException_whenSortPropertyIsNotAllowed() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+
+                OrderFilterDTO filter = new OrderFilterDTO(null);
+                Pageable invalidSort = PageRequest.of(0, 10, Sort.by("email"));
+
+                // Act & Assert
+                InvalidDataException exception = assertThrows(
+                        InvalidDataException.class,
+                        () -> orderService.getOrders(filter, invalidSort)
+                );
+                assertTrue(exception.getMessage().contains("email"));
+                assertTrue(exception.getMessage().contains("is not allowed"));
+            }
+
+            @Test
+            @DisplayName("Should throw InvalidDataException with the invalid property name in the message")
+            void shouldIncludePropertyNameInExceptionMessage_whenSortIsInvalid() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+
+                OrderFilterDTO filter = new OrderFilterDTO(null);
+                Pageable invalidSort = PageRequest.of(0, 10, Sort.by("password"));
+
+                // Act & Assert
+                InvalidDataException exception = assertThrows(
+                        InvalidDataException.class,
+                        () -> orderService.getOrders(filter, invalidSort)
+                );
+                assertEquals("Sorting by 'password' is not allowed", exception.getMessage());
+            }
+
+            @Test
+            @DisplayName("Should not call repository when sort validation fails")
+            void shouldNotCallRepository_whenSortValidationFails() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+
+                OrderFilterDTO filter = new OrderFilterDTO(null);
+                Pageable invalidSort = PageRequest.of(0, 10, Sort.by("status"));
+
+                // Act
+                assertThrows(InvalidDataException.class,
+                        () -> orderService.getOrders(filter, invalidSort));
+
+                // Assert
+                verify(orderRepository, never()).findByFilters(any(), any(), any());
+            }
+
+            @Test
+            @DisplayName("Should accept sorting by totalPrice")
+            void shouldAcceptSortingByTotalPrice() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+
+                OrderFilterDTO filter = new OrderFilterDTO(null);
+                Pageable sortByPrice = PageRequest.of(0, 10, Sort.by("totalPrice").ascending());
+
+                when(orderRepository.findByFilters(customerId, null, sortByPrice))
+                        .thenReturn(Page.empty(sortByPrice));
+
+                // Act & Assert — should NOT throw
+                assertDoesNotThrow(() -> orderService.getOrders(filter, sortByPrice));
+                verify(orderRepository).findByFilters(customerId, null, sortByPrice);
+            }
+
+            @Test
+            @DisplayName("Should accept sorting by createdAt")
+            void shouldAcceptSortingByCreatedAt() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+
+                OrderFilterDTO filter = new OrderFilterDTO(null);
+                Pageable sortByDate = PageRequest.of(0, 10, Sort.by("createdAt").ascending());
+
+                when(orderRepository.findByFilters(customerId, null, sortByDate))
+                        .thenReturn(Page.empty(sortByDate));
+
+                // Act & Assert — should NOT throw
+                assertDoesNotThrow(() -> orderService.getOrders(filter, sortByDate));
+                verify(orderRepository).findByFilters(customerId, null, sortByDate);
+            }
+
+            @Test
+            @DisplayName("Should reject the first invalid property even when combined with valid ones")
+            void shouldRejectFirstInvalidProperty_whenMixedWithValidOnes() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+
+                OrderFilterDTO filter = new OrderFilterDTO(null);
+                // "createdAt" is valid, but "id" is not
+                Pageable mixedSort = PageRequest.of(0, 10,
+                        Sort.by("createdAt").ascending().and(Sort.by("id").ascending()));
+
+                // Act & Assert — should throw on "id"
+                InvalidDataException exception = assertThrows(
+                        InvalidDataException.class,
+                        () -> orderService.getOrders(filter, mixedSort)
+                );
+                assertTrue(exception.getMessage().contains("id"));
+                assertTrue(exception.getMessage().contains("is not allowed"));
+            }
+        }
+
+        // ==================== getOrders() — CUSTOMER NOT FOUND ====================
+
+        @Nested
+        @DisplayName("getOrders() — Customer not found")
+        class GetOrdersCustomerNotFound {
+
+            @Test
+            @DisplayName("Should throw CustomerNotFoundException when authenticated user profile is not found")
+            void shouldThrowCustomerNotFoundException_whenProfileNotFound() {
+                // Arrange
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.empty());
+
+                OrderFilterDTO filter = new OrderFilterDTO(null);
+                Pageable pageable = PageRequest.of(0, 10);
+
+                // Act & Assert
+                CustomerNotFoundException exception = assertThrows(
+                        CustomerNotFoundException.class,
+                        () -> orderService.getOrders(filter, pageable)
+                );
+                assertEquals("Profile not found", exception.getMessage());
+            }
+
+            @Test
+            @DisplayName("Should not interact with order repository when customer is not found")
+            void shouldNotCallOrderRepository_whenCustomerNotFound() {
+                // Arrange
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.empty());
+
+                OrderFilterDTO filter = new OrderFilterDTO(null);
+                Pageable pageable = PageRequest.of(0, 10);
+
+                // Act
+                assertThrows(CustomerNotFoundException.class,
+                        () -> orderService.getOrders(filter, pageable));
+
+                // Assert
+                verify(orderRepository, never()).findByFilters(any(), any(), any());
+            }
+        }
+
+        // ==================== getOrders() — EMAIL LOWERCASING ====================
+
+        @Nested
+        @DisplayName("getOrders() — Email lowercasing")
+        class GetOrdersEmailLowercasing {
+
+            @Test
+            @DisplayName("Should lowercase the email before querying the customer repository")
+            void shouldLowercaseEmail_beforeCallingRepository() {
+                // Arrange
+                String upperCaseEmail = "JOHN.DOE@EXAMPLE.COM";
+                UUID customerId = UUID.randomUUID();
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+
+                stubAuthenticatedUser(upperCaseEmail);
+                when(customerRepository.findByEmailWithCart("john.doe@example.com")).thenReturn(Optional.of(customer));
+
+                OrderFilterDTO filter = new OrderFilterDTO(null);
+                Pageable pageable = PageRequest.of(0, 10, Sort.by("createdAt").descending());
+
+                when(orderRepository.findByFilters(customerId, null, pageable))
+                        .thenReturn(Page.empty(pageable));
+
+                // Act
+                orderService.getOrders(filter, PageRequest.of(0, 10));
+
+                // Assert
+                verify(customerRepository).findByEmailWithCart("john.doe@example.com");
+            }
+        }
+
+        // ==================== getOrders() — SECURITY CONTEXT FAILURES ====================
+
+        @Nested
+        @DisplayName("getOrders() — Security context failures")
+        class GetOrdersSecurityContextFailures {
+
+            @Test
+            @DisplayName("Should throw NullPointerException when SecurityContext has no Authentication")
+            void shouldThrowNPE_whenAuthenticationIsNull() {
+                // Arrange — SecurityContext exists but getAuthentication() returns null
+                SecurityContext securityContext = mock(SecurityContext.class);
+                when(securityContext.getAuthentication()).thenReturn(null);
+                SecurityContextHolder.setContext(securityContext);
+
+                OrderFilterDTO filter = new OrderFilterDTO(null);
+                Pageable pageable = PageRequest.of(0, 10);
+
+                // Act & Assert — calling getName() on null Authentication throws NPE
+                assertThrows(NullPointerException.class,
+                        () -> orderService.getOrders(filter, pageable));
+
+                // Verify no business operations occurred
+                verifyNoInteractions(customerRepository);
+                verify(orderRepository, never()).findByFilters(any(), any(), any());
+            }
+        }
+
+        // ==================== getOrders() — SERVER FAILURE CASES ====================
+
+        @Nested
+        @DisplayName("getOrders() — Server failure simulation")
+        class GetOrdersServerFailures {
+
+            @Test
+            @DisplayName("Should propagate RuntimeException when findByEmailWithCart throws")
+            void shouldPropagateException_whenFindByEmailWithCartThrowsRuntimeException() {
+                // Arrange
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL))
+                        .thenThrow(new RuntimeException("Database unavailable"));
+
+                OrderFilterDTO filter = new OrderFilterDTO(null);
+                Pageable pageable = PageRequest.of(0, 10);
+
+                // Act & Assert
+                RuntimeException exception = assertThrows(
+                        RuntimeException.class,
+                        () -> orderService.getOrders(filter, pageable)
+                );
+                assertEquals("Database unavailable", exception.getMessage());
+            }
+
+            @Test
+            @DisplayName("Should propagate RuntimeException when findByFilters throws")
+            void shouldPropagateException_whenFindByFiltersThrowsRuntimeException() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+
+                OrderFilterDTO filter = new OrderFilterDTO(null);
+                Pageable pageable = PageRequest.of(0, 10, Sort.by("createdAt").descending());
+
+                when(orderRepository.findByFilters(customerId, null, pageable))
+                        .thenThrow(new RuntimeException("Database connection lost"));
+
+                // Act & Assert
+                RuntimeException exception = assertThrows(
+                        RuntimeException.class,
+                        () -> orderService.getOrders(filter, PageRequest.of(0, 10))
+                );
+                assertEquals("Database connection lost", exception.getMessage());
+            }
+
+            @Test
+            @DisplayName("Should propagate IllegalStateException when findByEmailWithCart throws")
+            void shouldPropagateException_whenFindByEmailWithCartThrowsIllegalStateException() {
+                // Arrange
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL))
+                        .thenThrow(new IllegalStateException("Database unavailable"));
+
+                OrderFilterDTO filter = new OrderFilterDTO(null);
+                Pageable pageable = PageRequest.of(0, 10);
+
+                // Act & Assert
+                IllegalStateException exception = assertThrows(
+                        IllegalStateException.class,
+                        () -> orderService.getOrders(filter, pageable)
+                );
+                assertEquals("Database unavailable", exception.getMessage());
+            }
+
+            @Test
+            @DisplayName("Should propagate IllegalStateException when findByFilters throws")
+            void shouldPropagateException_whenFindByFiltersThrowsIllegalStateException() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+
+                OrderFilterDTO filter = new OrderFilterDTO(null);
+                Pageable pageable = PageRequest.of(0, 10, Sort.by("createdAt").descending());
+
+                when(orderRepository.findByFilters(customerId, null, pageable))
+                        .thenThrow(new IllegalStateException("Database connection lost"));
+
+                // Act & Assert
+                IllegalStateException exception = assertThrows(
+                        IllegalStateException.class,
+                        () -> orderService.getOrders(filter, PageRequest.of(0, 10))
+                );
+                assertEquals("Database connection lost", exception.getMessage());
+            }
+        }
+
+        // ==================== getOrders() — EDGE CASES ====================
+
+        @Nested
+        @DisplayName("getOrders() — Edge cases")
+        class GetOrdersEdgeCases {
+
+            @Test
+            @DisplayName("Should return an empty page when customer has no orders")
+            void shouldReturnEmptyPage_whenCustomerHasNoOrders() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+
+                OrderFilterDTO filter = new OrderFilterDTO(null);
+                Pageable pageable = PageRequest.of(0, 10, Sort.by("createdAt").descending());
+
+                when(orderRepository.findByFilters(customerId, null, pageable))
+                        .thenReturn(Page.empty(pageable));
+
+                // Act
+                Page<OrderSummaryResponseDTO> result = orderService.getOrders(filter, PageRequest.of(0, 10));
+
+                // Assert
+                assertNotNull(result);
+                assertEquals(0, result.getTotalElements());
+                assertTrue(result.getContent().isEmpty());
+            }
+
+            @Test
+            @DisplayName("Should return an empty page when filtering by status with no matching orders")
+            void shouldReturnEmptyPage_whenNoOrdersMatchStatusFilter() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+
+                OrderFilterDTO filter = new OrderFilterDTO(Status.CANCELED);
+                Pageable pageable = PageRequest.of(0, 10, Sort.by("createdAt").descending());
+
+                when(orderRepository.findByFilters(customerId, Status.CANCELED, pageable))
+                        .thenReturn(Page.empty(pageable));
+
+                // Act
+                Page<OrderSummaryResponseDTO> result = orderService.getOrders(filter, pageable);
+
+                // Assert
+                assertNotNull(result);
+                assertTrue(result.getContent().isEmpty());
+            }
+
+            @Test
+            @DisplayName("Should return multiple pages worth of results correctly")
+            void shouldHandlePagination_whenMultipleOrdersExist() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+
+                OrderSummaryResponseDTO order1 = new OrderSummaryResponseDTO(
+                        UUID.randomUUID(), Status.PENDING, 5000L,
+                        VALID_SHIPPING_ADDRESS, Instant.now()
+                );
+                OrderSummaryResponseDTO order2 = new OrderSummaryResponseDTO(
+                        UUID.randomUUID(), Status.SHIPPED, 12000L,
+                        "456 Oak Ave, LA, CA 90001", Instant.now()
+                );
+
+                OrderFilterDTO filter = new OrderFilterDTO(null);
+                Pageable pageable = PageRequest.of(0, 2, Sort.by("createdAt").descending());
+
+                // totalElements = 5 but this page only has 2
+                Page<OrderSummaryResponseDTO> expectedPage = new PageImpl<>(
+                        List.of(order1, order2), pageable, 5
+                );
+
+                when(orderRepository.findByFilters(customerId, null, pageable))
+                        .thenReturn(expectedPage);
+
+                // Act
+                Page<OrderSummaryResponseDTO> result = orderService.getOrders(filter, pageable);
+
+                // Assert
+                assertEquals(5, result.getTotalElements());
+                assertEquals(3, result.getTotalPages());
+                assertEquals(2, result.getContent().size());
+                assertFalse(result.isLast());
+            }
+        }
+
+        // ==================== getOrders() — INTERACTION VERIFICATION ====================
+
+        @Nested
+        @DisplayName("getOrders() — Interaction verification")
+        class GetOrdersInteractionVerification {
+
+            @Test
+            @DisplayName("Should call customerRepository and orderRepository in correct order")
+            void shouldCallRepositoriesInCorrectOrder() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+
+                OrderFilterDTO filter = new OrderFilterDTO(null);
+                Pageable pageable = PageRequest.of(0, 10, Sort.by("createdAt").descending());
+
+                when(orderRepository.findByFilters(customerId, null, pageable))
+                        .thenReturn(Page.empty(pageable));
+
+                // Act
+                orderService.getOrders(filter, PageRequest.of(0, 10));
+
+                // Assert — verify the order: customer lookup before order query
+                var inOrder = inOrder(customerRepository, orderRepository);
+                inOrder.verify(customerRepository).findByEmailWithCart(VALID_EMAIL);
+                inOrder.verify(orderRepository).findByFilters(eq(customerId), any(), any());
+            }
+
+            @Test
+            @DisplayName("Should not interact with cartItemRepository")
+            void shouldNotInteractWithCartItemRepository() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+
+                OrderFilterDTO filter = new OrderFilterDTO(null);
+                Pageable pageable = PageRequest.of(0, 10, Sort.by("createdAt").descending());
+
+                when(orderRepository.findByFilters(customerId, null, pageable))
+                        .thenReturn(Page.empty(pageable));
+
+                // Act
+                orderService.getOrders(filter, PageRequest.of(0, 10));
+
+                // Assert — getOrders should never touch the cart
+                verifyNoInteractions(cartItemRepository);
+            }
+
+            @Test
+            @DisplayName("Should call findByFilters exactly once")
+            void shouldCallFindByFiltersExactlyOnce() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+
+                OrderFilterDTO filter = new OrderFilterDTO(Status.DELIVERED);
+                Pageable pageable = PageRequest.of(0, 10, Sort.by("totalPrice").descending());
+
+                when(orderRepository.findByFilters(customerId, Status.DELIVERED, pageable))
+                        .thenReturn(Page.empty(pageable));
+
+                // Act
+                orderService.getOrders(filter, pageable);
+
+                // Assert
+                verify(orderRepository).findByFilters(customerId, Status.DELIVERED, pageable);
             }
         }
     }
