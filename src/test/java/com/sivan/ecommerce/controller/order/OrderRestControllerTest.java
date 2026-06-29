@@ -10,6 +10,7 @@ import com.sivan.ecommerce.entity.order.Status;
 import com.sivan.ecommerce.exception.CustomerNotFoundException;
 import com.sivan.ecommerce.exception.InsufficientStockException;
 import com.sivan.ecommerce.exception.InvalidDataException;
+import com.sivan.ecommerce.exception.OrderNotFoundException;
 import com.sivan.ecommerce.exception.ResourceConflictException;
 import com.sivan.ecommerce.service.order.OrderService;
 import org.junit.jupiter.api.DisplayName;
@@ -1353,6 +1354,444 @@ class OrderRestControllerTest {
                         .andExpect(status().isOk())
                         .andExpect(jsonPath("$.content", hasSize(1)))
                         .andExpect(jsonPath("$.content[0].status").value("SHIPPED"));
+            }
+        }
+    }
+
+    // ==================== getOrder() ====================
+    @Nested
+    @DisplayName("getOrder()")
+    class GetOrder {
+
+        // ======================== Helpers ========================
+
+        private OrderResponseDTO validOrderResponse() {
+            OrderItemResponseDTO orderItem = new OrderItemResponseDTO(
+                    VALID_PRODUCT_ID, VALID_PRODUCT_TITLE, VALID_QUANTITY, VALID_LOCKED_PRICE
+            );
+            return new OrderResponseDTO(
+                    VALID_ORDER_ID, Status.PENDING, VALID_TOTAL_PRICE,
+                    VALID_SHIPPING_ADDRESS, Instant.now(), Set.of(orderItem)
+            );
+        }
+
+        // ==================== SUCCESS CASES (200) ====================
+
+        @Nested
+        @DisplayName("Success cases — 200 OK")
+        class SuccessCases {
+
+            @Test
+            @DisplayName("Should return 200 and correct JSON when authenticated USER retrieves an existing order")
+            @WithMockUser(roles = "USER")
+            void shouldReturn200_whenOrderExists() throws Exception {
+                // Arrange
+                when(orderService.getOrder(VALID_ORDER_ID)).thenReturn(validOrderResponse());
+
+                // Act & Assert
+                mockMvc.perform(get(ORDERS_URL + "/{orderId}", VALID_ORDER_ID))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.id").value(VALID_ORDER_ID.toString()))
+                        .andExpect(jsonPath("$.status").value("PENDING"))
+                        .andExpect(jsonPath("$.totalPrice").value(VALID_TOTAL_PRICE))
+                        .andExpect(jsonPath("$.shippingAddress").value(VALID_SHIPPING_ADDRESS))
+                        .andExpect(jsonPath("$.createdAt").exists())
+                        .andExpect(jsonPath("$.orderItems").isArray())
+                        .andExpect(jsonPath("$.orderItems[0].productId").value(VALID_PRODUCT_ID.toString()))
+                        .andExpect(jsonPath("$.orderItems[0].productTitle").value(VALID_PRODUCT_TITLE))
+                        .andExpect(jsonPath("$.orderItems[0].quantity").value(VALID_QUANTITY))
+                        .andExpect(jsonPath("$.orderItems[0].lockedPrice").value(VALID_LOCKED_PRICE));
+
+                verify(orderService).getOrder(VALID_ORDER_ID);
+            }
+
+            @Test
+            @DisplayName("Should call orderService.getOrder exactly once")
+            @WithMockUser(roles = "USER")
+            void shouldCallServiceExactlyOnce() throws Exception {
+                // Arrange
+                when(orderService.getOrder(VALID_ORDER_ID)).thenReturn(validOrderResponse());
+
+                // Act
+                mockMvc.perform(get(ORDERS_URL + "/{orderId}", VALID_ORDER_ID))
+                        .andExpect(status().isOk());
+
+                // Assert
+                verify(orderService).getOrder(VALID_ORDER_ID);
+                verifyNoMoreInteractions(orderService);
+            }
+
+            @Test
+            @DisplayName("Should return 200 when ADMIN with USER role accesses order")
+            @WithMockUser(roles = {"USER", "ADMIN"})
+            void shouldReturn200_whenAdminWithUserRole() throws Exception {
+                // Arrange
+                when(orderService.getOrder(VALID_ORDER_ID)).thenReturn(validOrderResponse());
+
+                // Act & Assert
+                mockMvc.perform(get(ORDERS_URL + "/{orderId}", VALID_ORDER_ID))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.id").value(VALID_ORDER_ID.toString()));
+            }
+        }
+
+        // ==================== AUTHENTICATION FAILURES (401) ====================
+
+        @Nested
+        @DisplayName("Authentication failures — 401 Unauthorized")
+        class AuthenticationFailures {
+
+            @Test
+            @DisplayName("Should return 401 when no credentials are provided (anonymous)")
+            void shouldReturn401_whenNoCredentials() throws Exception {
+                mockMvc.perform(get(ORDERS_URL + "/{orderId}", VALID_ORDER_ID))
+                        .andExpect(status().isUnauthorized());
+
+                verifyNoInteractions(orderService);
+            }
+
+            @Test
+            @DisplayName("Should return 401 when invalid credentials are provided")
+            void shouldReturn401_whenInvalidCredentials() throws Exception {
+                mockMvc.perform(get(ORDERS_URL + "/{orderId}", VALID_ORDER_ID)
+                                .with(httpBasic("wrong@email.com", "WrongPassword1!")))
+                        .andExpect(status().isUnauthorized());
+
+                verifyNoInteractions(orderService);
+            }
+        }
+
+        // ==================== AUTHORIZATION FAILURES (403) ====================
+
+        @Nested
+        @DisplayName("Authorization failures — 403 Forbidden")
+        class AuthorizationFailures {
+
+            @Test
+            @DisplayName("Should return 403 when authenticated user has ROLE_SYSTEM (not USER)")
+            @WithMockUser(roles = "SYSTEM")
+            void shouldReturn403_whenRoleIsSystem() throws Exception {
+                mockMvc.perform(get(ORDERS_URL + "/{orderId}", VALID_ORDER_ID))
+                        .andExpect(status().isForbidden());
+
+                verifyNoInteractions(orderService);
+            }
+
+            @Test
+            @DisplayName("Should return 403 when authenticated user has ROLE_ADMIN only (without USER)")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn403_whenRoleIsAdminOnly() throws Exception {
+                mockMvc.perform(get(ORDERS_URL + "/{orderId}", VALID_ORDER_ID))
+                        .andExpect(status().isForbidden());
+
+                verifyNoInteractions(orderService);
+            }
+
+            @Test
+            @DisplayName("Should return 403 when user has no roles at all")
+            @WithMockUser(roles = {})
+            void shouldReturn403_whenUserHasNoRoles() throws Exception {
+                mockMvc.perform(get(ORDERS_URL + "/{orderId}", VALID_ORDER_ID))
+                        .andExpect(status().isForbidden());
+
+                verifyNoInteractions(orderService);
+            }
+        }
+
+        // ==================== NOT FOUND CASES — Customer profile (404) ====================
+
+        @Nested
+        @DisplayName("Not found cases — 404 Not Found")
+        class NotFoundCases {
+
+            @Test
+            @DisplayName("Should return 404 when customer profile is not found in database")
+            @WithMockUser(roles = "USER")
+            void shouldReturn404_whenCustomerNotFound() throws Exception {
+                // Arrange
+                when(orderService.getOrder(VALID_ORDER_ID))
+                        .thenThrow(new CustomerNotFoundException("Profile not found"));
+
+                // Act & Assert
+                mockMvc.perform(get(ORDERS_URL + "/{orderId}", VALID_ORDER_ID))
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.status").value(404))
+                        .andExpect(jsonPath("$.message").value("Profile not found"));
+            }
+
+            @Test
+            @DisplayName("Should return 404 when order does not exist for the authenticated customer")
+            @WithMockUser(roles = "USER")
+            void shouldReturn404_whenOrderNotFound() throws Exception {
+                // Arrange
+                when(orderService.getOrder(VALID_ORDER_ID))
+                        .thenThrow(new OrderNotFoundException("Order not found"));
+
+                // Act & Assert
+                mockMvc.perform(get(ORDERS_URL + "/{orderId}", VALID_ORDER_ID))
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.status").value(404))
+                        .andExpect(jsonPath("$.message").value("Order not found"));
+            }
+        }
+
+        // ==================== VALIDATION FAILURES — Path variable (400) ====================
+
+        @Nested
+        @DisplayName("Invalid path variable — 400 Bad Request")
+        class InvalidPathVariable {
+
+            @Test
+            @DisplayName("Should return 400 when orderId is not a valid UUID format")
+            @WithMockUser(roles = "USER")
+            void shouldReturn400_whenOrderIdIsInvalidUUID() throws Exception {
+                mockMvc.perform(get(ORDERS_URL + "/{orderId}", "not-a-valid-uuid"))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.status").value(400))
+                        .andExpect(jsonPath("$.message").isNotEmpty());
+
+                verifyNoInteractions(orderService);
+            }
+
+            @Test
+            @DisplayName("Should return 400 when orderId is a plain number instead of UUID")
+            @WithMockUser(roles = "USER")
+            void shouldReturn400_whenOrderIdIsPlainNumber() throws Exception {
+                mockMvc.perform(get(ORDERS_URL + "/{orderId}", "12345"))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.status").value(400))
+                        .andExpect(jsonPath("$.message").isNotEmpty());
+
+                verifyNoInteractions(orderService);
+            }
+
+            @Test
+            @DisplayName("Should return 400 when orderId is an empty string")
+            @WithMockUser(roles = "USER")
+            void shouldReturn400_whenOrderIdIsEmpty() throws Exception {
+                // GET /orders/ with trailing slash — Spring resolves this to the list endpoint,
+                // but GET /orders/%20 (whitespace-encoded) hits the path variable as a blank string
+                mockMvc.perform(get(ORDERS_URL + "/{orderId}", " "))
+                        .andExpect(status().isBadRequest());
+
+                verifyNoInteractions(orderService);
+            }
+        }
+
+        // ==================== SERVICE EXCEPTION HANDLING (500) ====================
+
+        @Nested
+        @DisplayName("Service exception handling — 500 Internal Server Error")
+        class ServiceExceptionHandling {
+
+            @Test
+            @DisplayName("Should return 500 when service throws an unexpected RuntimeException")
+            @WithMockUser(roles = "USER")
+            void shouldReturn500_whenServiceThrowsRuntimeException() throws Exception {
+                // Arrange
+                when(orderService.getOrder(VALID_ORDER_ID))
+                        .thenThrow(new RuntimeException("Database connection lost"));
+
+                // Act & Assert
+                mockMvc.perform(get(ORDERS_URL + "/{orderId}", VALID_ORDER_ID))
+                        .andExpect(status().isInternalServerError())
+                        .andExpect(jsonPath("$.status").value(500))
+                        .andExpect(jsonPath("$.message").value("An unexpected error occurred."));
+            }
+
+            @Test
+            @DisplayName("Should return 500 when service throws an unexpected IllegalStateException")
+            @WithMockUser(roles = "USER")
+            void shouldReturn500_whenServiceThrowsIllegalStateException() throws Exception {
+                // Arrange
+                when(orderService.getOrder(VALID_ORDER_ID))
+                        .thenThrow(new IllegalStateException("Unexpected internal state"));
+
+                // Act & Assert
+                mockMvc.perform(get(ORDERS_URL + "/{orderId}", VALID_ORDER_ID))
+                        .andExpect(status().isInternalServerError())
+                        .andExpect(jsonPath("$.status").value(500))
+                        .andExpect(jsonPath("$.message").value("An unexpected error occurred."));
+            }
+        }
+
+        // ==================== JSON RESPONSE STRUCTURE ====================
+
+        @Nested
+        @DisplayName("JSON response structure validation")
+        class JsonResponseStructure {
+
+            @Test
+            @DisplayName("Should return all expected fields in the success response")
+            @WithMockUser(roles = "USER")
+            void shouldReturnAllFieldsInResponse() throws Exception {
+                // Arrange
+                when(orderService.getOrder(VALID_ORDER_ID)).thenReturn(validOrderResponse());
+
+                // Act & Assert
+                mockMvc.perform(get(ORDERS_URL + "/{orderId}", VALID_ORDER_ID))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.id").exists())
+                        .andExpect(jsonPath("$.status").exists())
+                        .andExpect(jsonPath("$.totalPrice").exists())
+                        .andExpect(jsonPath("$.shippingAddress").exists())
+                        .andExpect(jsonPath("$.createdAt").exists())
+                        .andExpect(jsonPath("$.orderItems").exists())
+                        .andExpect(jsonPath("$.orderItems").isArray());
+            }
+
+            @Test
+            @DisplayName("Should return order item fields in the response")
+            @WithMockUser(roles = "USER")
+            void shouldReturnOrderItemFieldsInResponse() throws Exception {
+                // Arrange
+                when(orderService.getOrder(VALID_ORDER_ID)).thenReturn(validOrderResponse());
+
+                // Act & Assert
+                mockMvc.perform(get(ORDERS_URL + "/{orderId}", VALID_ORDER_ID))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.orderItems[0].productId").exists())
+                        .andExpect(jsonPath("$.orderItems[0].productTitle").exists())
+                        .andExpect(jsonPath("$.orderItems[0].quantity").exists())
+                        .andExpect(jsonPath("$.orderItems[0].lockedPrice").exists());
+            }
+
+            @Test
+            @DisplayName("Error response should contain status, message, and timeStamp fields")
+            @WithMockUser(roles = "USER")
+            void shouldReturnErrorResponseStructure() throws Exception {
+                // Arrange
+                when(orderService.getOrder(VALID_ORDER_ID))
+                        .thenThrow(new OrderNotFoundException("Order not found"));
+
+                // Act & Assert
+                mockMvc.perform(get(ORDERS_URL + "/{orderId}", VALID_ORDER_ID))
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.status").value(404))
+                        .andExpect(jsonPath("$.message").isNotEmpty())
+                        .andExpect(jsonPath("$.timeStamp").isNumber());
+            }
+        }
+
+        // ==================== EDGE CASES ====================
+
+        @Nested
+        @DisplayName("Edge cases")
+        class EdgeCases {
+
+            @Test
+            @DisplayName("Should return 200 when order contains multiple order items")
+            @WithMockUser(roles = "USER")
+            void shouldReturn200_whenOrderContainsMultipleItems() throws Exception {
+                // Arrange
+                UUID productId2 = UUID.fromString("22222222-2222-2222-2222-222222222222");
+
+                OrderItemResponseDTO item1 = new OrderItemResponseDTO(
+                        VALID_PRODUCT_ID, "Wireless Headphones", 2, 2500L
+                );
+                OrderItemResponseDTO item2 = new OrderItemResponseDTO(
+                        productId2, "Mechanical Keyboard", 1, 8000L
+                );
+                OrderResponseDTO response = new OrderResponseDTO(
+                        VALID_ORDER_ID, Status.PENDING, 13000L,
+                        VALID_SHIPPING_ADDRESS, Instant.now(), Set.of(item1, item2)
+                );
+
+                when(orderService.getOrder(VALID_ORDER_ID)).thenReturn(response);
+
+                // Act & Assert
+                mockMvc.perform(get(ORDERS_URL + "/{orderId}", VALID_ORDER_ID))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.totalPrice").value(13000L))
+                        .andExpect(jsonPath("$.orderItems.length()").value(2));
+            }
+
+            @Test
+            @DisplayName("Should return 200 when order has a shippingAddress with special characters")
+            @WithMockUser(roles = "USER")
+            void shouldReturn200_whenShippingAddressHasSpecialCharacters() throws Exception {
+                // Arrange
+                String specialAddress = "Apt #42, 123 O'Brien St, São Paulo — Brazil (南京)";
+
+                OrderItemResponseDTO orderItem = new OrderItemResponseDTO(
+                        VALID_PRODUCT_ID, VALID_PRODUCT_TITLE, VALID_QUANTITY, VALID_LOCKED_PRICE
+                );
+                OrderResponseDTO response = new OrderResponseDTO(
+                        VALID_ORDER_ID, Status.DELIVERED, VALID_TOTAL_PRICE,
+                        specialAddress, Instant.now(), Set.of(orderItem)
+                );
+
+                when(orderService.getOrder(VALID_ORDER_ID)).thenReturn(response);
+
+                // Act & Assert
+                mockMvc.perform(get(ORDERS_URL + "/{orderId}", VALID_ORDER_ID))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.shippingAddress").value(specialAddress));
+            }
+
+            @Test
+            @DisplayName("Should return 200 when order status is SHIPPED")
+            @WithMockUser(roles = "USER")
+            void shouldReturn200_whenOrderStatusIsShipped() throws Exception {
+                // Arrange
+                OrderItemResponseDTO orderItem = new OrderItemResponseDTO(
+                        VALID_PRODUCT_ID, VALID_PRODUCT_TITLE, VALID_QUANTITY, VALID_LOCKED_PRICE
+                );
+                OrderResponseDTO response = new OrderResponseDTO(
+                        VALID_ORDER_ID, Status.SHIPPED, VALID_TOTAL_PRICE,
+                        VALID_SHIPPING_ADDRESS, Instant.now(), Set.of(orderItem)
+                );
+
+                when(orderService.getOrder(VALID_ORDER_ID)).thenReturn(response);
+
+                // Act & Assert
+                mockMvc.perform(get(ORDERS_URL + "/{orderId}", VALID_ORDER_ID))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.status").value("SHIPPED"));
+            }
+
+            @Test
+            @DisplayName("Should return 200 when order status is CANCELED")
+            @WithMockUser(roles = "USER")
+            void shouldReturn200_whenOrderStatusIsCanceled() throws Exception {
+                // Arrange
+                OrderItemResponseDTO orderItem = new OrderItemResponseDTO(
+                        VALID_PRODUCT_ID, VALID_PRODUCT_TITLE, VALID_QUANTITY, VALID_LOCKED_PRICE
+                );
+                OrderResponseDTO response = new OrderResponseDTO(
+                        VALID_ORDER_ID, Status.CANCELED, VALID_TOTAL_PRICE,
+                        VALID_SHIPPING_ADDRESS, Instant.now(), Set.of(orderItem)
+                );
+
+                when(orderService.getOrder(VALID_ORDER_ID)).thenReturn(response);
+
+                // Act & Assert
+                mockMvc.perform(get(ORDERS_URL + "/{orderId}", VALID_ORDER_ID))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.status").value("CANCELED"));
+            }
+
+            @Test
+            @DisplayName("Should return 200 when a different valid UUID is used as orderId")
+            @WithMockUser(roles = "USER")
+            void shouldReturn200_whenDifferentUUIDIsUsed() throws Exception {
+                // Arrange
+                UUID differentOrderId = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+
+                OrderItemResponseDTO orderItem = new OrderItemResponseDTO(
+                        VALID_PRODUCT_ID, VALID_PRODUCT_TITLE, VALID_QUANTITY, VALID_LOCKED_PRICE
+                );
+                OrderResponseDTO response = new OrderResponseDTO(
+                        differentOrderId, Status.PENDING, VALID_TOTAL_PRICE,
+                        VALID_SHIPPING_ADDRESS, Instant.now(), Set.of(orderItem)
+                );
+
+                when(orderService.getOrder(differentOrderId)).thenReturn(response);
+
+                // Act & Assert
+                mockMvc.perform(get(ORDERS_URL + "/{orderId}", differentOrderId))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.id").value(differentOrderId.toString()));
             }
         }
     }
