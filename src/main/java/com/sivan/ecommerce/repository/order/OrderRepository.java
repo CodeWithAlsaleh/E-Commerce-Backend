@@ -22,6 +22,16 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
             """)
     Optional<Order> findByIdempotencyKey(@Param("idempotencyKey") String idempotencyKey);
 
+    @Query("""
+            SELECT o
+            FROM Order o
+            JOIN FETCH o.orderItems oi
+            JOIN FETCH oi.product
+            WHERE o.customer.id = :customerId AND o.id = :orderId
+            """)
+    Optional<Order> findByCustomerIdAndOrderId(@Param("customerId") UUID customerId,
+                                               @Param("orderId") UUID orderId);
+
     @Query(value = """
             SELECT new com.sivan.ecommerce.dto.order.OrderSummaryResponseDTO(
                         o.id,

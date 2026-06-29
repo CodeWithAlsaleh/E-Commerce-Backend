@@ -10,10 +10,7 @@ import com.sivan.ecommerce.entity.order.Order;
 import com.sivan.ecommerce.entity.order.OrderItem;
 import com.sivan.ecommerce.entity.order.Status;
 import com.sivan.ecommerce.entity.product.Product;
-import com.sivan.ecommerce.exception.CustomerNotFoundException;
-import com.sivan.ecommerce.exception.InsufficientStockException;
-import com.sivan.ecommerce.exception.InvalidDataException;
-import com.sivan.ecommerce.exception.ResourceConflictException;
+import com.sivan.ecommerce.exception.*;
 import com.sivan.ecommerce.mapper.order.OrderMapper;
 import com.sivan.ecommerce.repository.cart.CartItemRepository;
 import com.sivan.ecommerce.repository.customer.CustomerRepository;
@@ -28,10 +25,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 
 @Service
 public class OrderServiceImpl implements OrderService {
@@ -112,6 +106,17 @@ public class OrderServiceImpl implements OrderService {
         }
 
         return orderRepository.findByFilters(customer.getId(), orderFilterDTO.status(), pageable);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public OrderResponseDTO getOrder(UUID orderId) {
+        Customer customer = getCurrentCustomer();
+
+        Order order = orderRepository.findByCustomerIdAndOrderId(customer.getId(), orderId)
+                .orElseThrow(() -> new OrderNotFoundException("Order not found"));
+
+        return OrderMapper.mapOrderToOrderResponse(order);
     }
 
     private Customer getCurrentCustomer() {

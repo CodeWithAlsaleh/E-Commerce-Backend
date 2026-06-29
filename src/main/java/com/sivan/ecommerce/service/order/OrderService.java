@@ -7,9 +7,13 @@ import com.sivan.ecommerce.dto.order.OrderSummaryResponseDTO;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
+import java.util.UUID;
+
 public interface OrderService {
 
     OrderResponseDTO placeOrder(String idempotencyKey, OrderRequestDTO orderRequestDTO);
 
     Page<OrderSummaryResponseDTO> getOrders(OrderFilterDTO orderFilterDTO, Pageable pageable);
+
+    OrderResponseDTO getOrder(UUID orderId);
 }
