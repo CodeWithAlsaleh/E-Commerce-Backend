@@ -17,7 +17,8 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
     @Query("""
             SELECT o
             FROM Order o
-            JOIN FETCH o.orderItems
+            JOIN FETCH o.orderItems oi
+            JOIN FETCH oi.product
             WHERE o.idempotencyKey = :idempotencyKey
             """)
     Optional<Order> findByIdempotencyKey(@Param("idempotencyKey") String idempotencyKey);
