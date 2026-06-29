@@ -1,9 +1,11 @@
 package com.sivan.ecommerce.controller.order;
 
 import com.sivan.ecommerce.config.SecurityConfig;
+import com.sivan.ecommerce.dto.order.OrderFilterDTO;
 import com.sivan.ecommerce.dto.order.OrderItemResponseDTO;
 import com.sivan.ecommerce.dto.order.OrderRequestDTO;
 import com.sivan.ecommerce.dto.order.OrderResponseDTO;
+import com.sivan.ecommerce.dto.order.OrderSummaryResponseDTO;
 import com.sivan.ecommerce.entity.order.Status;
 import com.sivan.ecommerce.exception.CustomerNotFoundException;
 import com.sivan.ecommerce.exception.InsufficientStockException;
@@ -16,6 +18,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -23,13 +29,17 @@ import org.springframework.test.web.servlet.MockMvc;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
+import java.util.Collections;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import static org.hamcrest.Matchers.hasSize;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -787,6 +797,562 @@ class OrderRestControllerTest {
                         .andExpect(status().isCreated())
                         .andExpect(jsonPath("$.totalPrice").value(13000L))
                         .andExpect(jsonPath("$.orderItems.length()").value(2));
+            }
+        }
+    }
+
+    // ==================== getOrders() ====================
+    @Nested
+    @DisplayName("getOrders()")
+    class GetOrders {
+
+        // ======================== Constants ========================
+
+        private static final UUID ORDER_ID_1 = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        private static final UUID ORDER_ID_2 = UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc");
+        private static final UUID ORDER_ID_3 = UUID.fromString("dddddddd-dddd-dddd-dddd-dddddddddddd");
+
+        // ======================== Helpers ========================
+
+        private OrderSummaryResponseDTO buildSummary(UUID id, Status status, long totalPrice) {
+            return new OrderSummaryResponseDTO(id, status, totalPrice, VALID_SHIPPING_ADDRESS, Instant.now());
+        }
+
+        private Page<OrderSummaryResponseDTO> singleOrderPage() {
+            OrderSummaryResponseDTO summary = buildSummary(ORDER_ID_1, Status.PENDING, VALID_TOTAL_PRICE);
+            return new PageImpl<>(List.of(summary), PageRequest.of(0, 20), 1);
+        }
+
+        private Page<OrderSummaryResponseDTO> emptyPage() {
+            return new PageImpl<>(Collections.emptyList(), PageRequest.of(0, 20), 0);
+        }
+
+        // ==================== SUCCESS CASES (200) ====================
+
+        @Nested
+        @DisplayName("Success cases — 200 OK")
+        class SuccessCases {
+
+            @Test
+            @DisplayName("Should return 200 and paginated orders when authenticated USER requests orders")
+            @WithMockUser(roles = "USER")
+            void shouldReturn200_whenValidRequest() throws Exception {
+                // Arrange
+                when(orderService.getOrders(any(OrderFilterDTO.class), any(Pageable.class)))
+                        .thenReturn(singleOrderPage());
+
+                // Act & Assert
+                mockMvc.perform(get(ORDERS_URL))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.content").isArray())
+                        .andExpect(jsonPath("$.content", hasSize(1)))
+                        .andExpect(jsonPath("$.content[0].id").value(ORDER_ID_1.toString()))
+                        .andExpect(jsonPath("$.content[0].status").value("PENDING"))
+                        .andExpect(jsonPath("$.content[0].totalPrice").value(VALID_TOTAL_PRICE))
+                        .andExpect(jsonPath("$.content[0].shippingAddress").value(VALID_SHIPPING_ADDRESS))
+                        .andExpect(jsonPath("$.content[0].createdAt").exists());
+
+                verify(orderService).getOrders(any(OrderFilterDTO.class), any(Pageable.class));
+            }
+
+            @Test
+            @DisplayName("Should call orderService.getOrders exactly once")
+            @WithMockUser(roles = "USER")
+            void shouldCallServiceExactlyOnce() throws Exception {
+                // Arrange
+                when(orderService.getOrders(any(OrderFilterDTO.class), any(Pageable.class)))
+                        .thenReturn(singleOrderPage());
+
+                // Act
+                mockMvc.perform(get(ORDERS_URL))
+                        .andExpect(status().isOk());
+
+                // Assert
+                verify(orderService).getOrders(any(OrderFilterDTO.class), any(Pageable.class));
+                verifyNoMoreInteractions(orderService);
+            }
+
+            @Test
+            @DisplayName("Should return 200 with empty content when no orders exist")
+            @WithMockUser(roles = "USER")
+            void shouldReturn200_whenNoOrdersExist() throws Exception {
+                // Arrange
+                when(orderService.getOrders(any(OrderFilterDTO.class), any(Pageable.class)))
+                        .thenReturn(emptyPage());
+
+                // Act & Assert
+                mockMvc.perform(get(ORDERS_URL))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.content").isArray())
+                        .andExpect(jsonPath("$.content", hasSize(0)))
+                        .andExpect(jsonPath("$.totalElements").value(0));
+            }
+
+            @Test
+            @DisplayName("Should return 200 and pass pagination parameters correctly")
+            @WithMockUser(roles = "USER")
+            void shouldReturn200_whenPaginationParametersProvided() throws Exception {
+                // Arrange
+                when(orderService.getOrders(any(OrderFilterDTO.class), any(Pageable.class)))
+                        .thenReturn(singleOrderPage());
+
+                // Act & Assert
+                mockMvc.perform(get(ORDERS_URL)
+                                .param("page", "0")
+                                .param("size", "10"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.content").isArray());
+
+                verify(orderService).getOrders(any(OrderFilterDTO.class), any(Pageable.class));
+            }
+
+            @Test
+            @DisplayName("Should return 200 when filtering by status PENDING")
+            @WithMockUser(roles = "USER")
+            void shouldReturn200_whenFilteringByStatusPending() throws Exception {
+                // Arrange
+                OrderSummaryResponseDTO pendingSummary = buildSummary(ORDER_ID_1, Status.PENDING, VALID_TOTAL_PRICE);
+                Page<OrderSummaryResponseDTO> pendingPage = new PageImpl<>(List.of(pendingSummary), PageRequest.of(0, 20), 1);
+
+                OrderFilterDTO expectedFilter = new OrderFilterDTO(Status.PENDING);
+
+                when(orderService.getOrders(eq(expectedFilter), any(Pageable.class)))
+                        .thenReturn(pendingPage);
+
+                // Act & Assert
+                mockMvc.perform(get(ORDERS_URL)
+                                .param("status", "PENDING"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.content", hasSize(1)))
+                        .andExpect(jsonPath("$.content[0].status").value("PENDING"));
+
+                verify(orderService).getOrders(eq(expectedFilter), any(Pageable.class));
+            }
+
+            @Test
+            @DisplayName("Should return 200 when filtering by status DELIVERED")
+            @WithMockUser(roles = "USER")
+            void shouldReturn200_whenFilteringByStatusDelivered() throws Exception {
+                // Arrange
+                OrderSummaryResponseDTO deliveredSummary = buildSummary(ORDER_ID_1, Status.DELIVERED, VALID_TOTAL_PRICE);
+                Page<OrderSummaryResponseDTO> deliveredPage = new PageImpl<>(List.of(deliveredSummary), PageRequest.of(0, 20), 1);
+
+                OrderFilterDTO expectedFilter = new OrderFilterDTO(Status.DELIVERED);
+
+                when(orderService.getOrders(eq(expectedFilter), any(Pageable.class)))
+                        .thenReturn(deliveredPage);
+
+                // Act & Assert
+                mockMvc.perform(get(ORDERS_URL)
+                                .param("status", "DELIVERED"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.content", hasSize(1)))
+                        .andExpect(jsonPath("$.content[0].status").value("DELIVERED"));
+
+                verify(orderService).getOrders(eq(expectedFilter), any(Pageable.class));
+            }
+
+            @Test
+            @DisplayName("Should return 200 when filtering by status CANCELED")
+            @WithMockUser(roles = "USER")
+            void shouldReturn200_whenFilteringByStatusCanceled() throws Exception {
+                // Arrange
+                OrderSummaryResponseDTO canceledSummary = buildSummary(ORDER_ID_1, Status.CANCELED, VALID_TOTAL_PRICE);
+                Page<OrderSummaryResponseDTO> canceledPage = new PageImpl<>(List.of(canceledSummary), PageRequest.of(0, 20), 1);
+
+                OrderFilterDTO expectedFilter = new OrderFilterDTO(Status.CANCELED);
+
+                when(orderService.getOrders(eq(expectedFilter), any(Pageable.class)))
+                        .thenReturn(canceledPage);
+
+                // Act & Assert
+                mockMvc.perform(get(ORDERS_URL)
+                                .param("status", "CANCELED"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.content", hasSize(1)))
+                        .andExpect(jsonPath("$.content[0].status").value("CANCELED"));
+
+                verify(orderService).getOrders(eq(expectedFilter), any(Pageable.class));
+            }
+
+            @Test
+            @DisplayName("Should return 200 when filtering by status SHIPPED")
+            @WithMockUser(roles = "USER")
+            void shouldReturn200_whenFilteringByStatusShipped() throws Exception {
+                // Arrange
+                OrderSummaryResponseDTO shippedSummary = buildSummary(ORDER_ID_1, Status.SHIPPED, VALID_TOTAL_PRICE);
+                Page<OrderSummaryResponseDTO> shippedPage = new PageImpl<>(List.of(shippedSummary), PageRequest.of(0, 20), 1);
+
+                OrderFilterDTO expectedFilter = new OrderFilterDTO(Status.SHIPPED);
+
+                when(orderService.getOrders(eq(expectedFilter), any(Pageable.class)))
+                        .thenReturn(shippedPage);
+
+                // Act & Assert
+                mockMvc.perform(get(ORDERS_URL)
+                                .param("status", "SHIPPED"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.content", hasSize(1)))
+                        .andExpect(jsonPath("$.content[0].status").value("SHIPPED"));
+
+                verify(orderService).getOrders(eq(expectedFilter), any(Pageable.class));
+            }
+
+            @Test
+            @DisplayName("Should return 200 with multiple orders in the page")
+            @WithMockUser(roles = "USER")
+            void shouldReturn200_whenMultipleOrdersExist() throws Exception {
+                // Arrange
+                OrderSummaryResponseDTO summary1 = buildSummary(ORDER_ID_1, Status.PENDING, 7500L);
+                OrderSummaryResponseDTO summary2 = buildSummary(ORDER_ID_2, Status.SHIPPED, 12000L);
+                OrderSummaryResponseDTO summary3 = buildSummary(ORDER_ID_3, Status.DELIVERED, 3500L);
+
+                Page<OrderSummaryResponseDTO> multiPage =
+                        new PageImpl<>(List.of(summary1, summary2, summary3), PageRequest.of(0, 20), 3);
+
+                when(orderService.getOrders(any(OrderFilterDTO.class), any(Pageable.class)))
+                        .thenReturn(multiPage);
+
+                // Act & Assert
+                mockMvc.perform(get(ORDERS_URL))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.content", hasSize(3)))
+                        .andExpect(jsonPath("$.totalElements").value(3))
+                        .andExpect(jsonPath("$.content[0].id").value(ORDER_ID_1.toString()))
+                        .andExpect(jsonPath("$.content[1].id").value(ORDER_ID_2.toString()))
+                        .andExpect(jsonPath("$.content[2].id").value(ORDER_ID_3.toString()));
+            }
+
+            @Test
+            @DisplayName("Should return 200 when sorting by createdAt")
+            @WithMockUser(roles = "USER")
+            void shouldReturn200_whenSortingByCreatedAt() throws Exception {
+                // Arrange
+                when(orderService.getOrders(any(OrderFilterDTO.class), any(Pageable.class)))
+                        .thenReturn(singleOrderPage());
+
+                // Act & Assert
+                mockMvc.perform(get(ORDERS_URL)
+                                .param("sort", "createdAt,desc"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.content").isArray());
+
+                verify(orderService).getOrders(any(OrderFilterDTO.class), any(Pageable.class));
+            }
+
+            @Test
+            @DisplayName("Should return 200 when sorting by totalPrice")
+            @WithMockUser(roles = "USER")
+            void shouldReturn200_whenSortingByTotalPrice() throws Exception {
+                // Arrange
+                when(orderService.getOrders(any(OrderFilterDTO.class), any(Pageable.class)))
+                        .thenReturn(singleOrderPage());
+
+                // Act & Assert
+                mockMvc.perform(get(ORDERS_URL)
+                                .param("sort", "totalPrice,asc"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.content").isArray());
+
+                verify(orderService).getOrders(any(OrderFilterDTO.class), any(Pageable.class));
+            }
+
+            @Test
+            @DisplayName("Should return 200 when ADMIN role accesses orders (ADMIN has USER permissions implicitly)")
+            @WithMockUser(roles = {"USER", "ADMIN"})
+            void shouldReturn200_whenAdminWithUserRole() throws Exception {
+                // Arrange
+                when(orderService.getOrders(any(OrderFilterDTO.class), any(Pageable.class)))
+                        .thenReturn(singleOrderPage());
+
+                // Act & Assert
+                mockMvc.perform(get(ORDERS_URL))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.content").isArray());
+            }
+        }
+
+        // ==================== AUTHENTICATION FAILURES (401) ====================
+
+        @Nested
+        @DisplayName("Authentication failures — 401 Unauthorized")
+        class AuthenticationFailures {
+
+            @Test
+            @DisplayName("Should return 401 when no credentials are provided (anonymous)")
+            void shouldReturn401_whenNoCredentials() throws Exception {
+                mockMvc.perform(get(ORDERS_URL))
+                        .andExpect(status().isUnauthorized());
+
+                verifyNoInteractions(orderService);
+            }
+
+            @Test
+            @DisplayName("Should return 401 when invalid credentials are provided")
+            void shouldReturn401_whenInvalidCredentials() throws Exception {
+                mockMvc.perform(get(ORDERS_URL)
+                                .with(httpBasic("wrong@email.com", "WrongPassword1!")))
+                        .andExpect(status().isUnauthorized());
+
+                verifyNoInteractions(orderService);
+            }
+        }
+
+        // ==================== AUTHORIZATION FAILURES (403) ====================
+
+        @Nested
+        @DisplayName("Authorization failures — 403 Forbidden")
+        class AuthorizationFailures {
+
+            @Test
+            @DisplayName("Should return 403 when authenticated user has ROLE_SYSTEM (not USER)")
+            @WithMockUser(roles = "SYSTEM")
+            void shouldReturn403_whenRoleIsSystem() throws Exception {
+                mockMvc.perform(get(ORDERS_URL))
+                        .andExpect(status().isForbidden());
+
+                verifyNoInteractions(orderService);
+            }
+
+            @Test
+            @DisplayName("Should return 403 when authenticated user has ROLE_ADMIN only (without USER)")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn403_whenRoleIsAdminOnly() throws Exception {
+                mockMvc.perform(get(ORDERS_URL))
+                        .andExpect(status().isForbidden());
+
+                verifyNoInteractions(orderService);
+            }
+
+            @Test
+            @DisplayName("Should return 403 when user has no roles at all")
+            @WithMockUser(roles = {})
+            void shouldReturn403_whenUserHasNoRoles() throws Exception {
+                mockMvc.perform(get(ORDERS_URL))
+                        .andExpect(status().isForbidden());
+
+                verifyNoInteractions(orderService);
+            }
+        }
+
+        // ==================== VALIDATION FAILURES — Query parameters (400) ====================
+
+        @Nested
+        @DisplayName("Validation failures — Query parameters — 400 Bad Request")
+        class QueryParameterValidationFailures {
+
+            @Test
+            @DisplayName("Should return 400 when status query parameter is an invalid enum value")
+            @WithMockUser(roles = "USER")
+            void shouldReturn400_whenStatusIsInvalidEnum() throws Exception {
+                mockMvc.perform(get(ORDERS_URL)
+                                .param("status", "INVALID_STATUS"))
+                        .andExpect(status().isBadRequest());
+
+                verifyNoInteractions(orderService);
+            }
+
+            @Test
+            @DisplayName("Should return 400 when service rejects disallowed sort field")
+            @WithMockUser(roles = "USER")
+            void shouldReturn400_whenSortFieldIsNotAllowed() throws Exception {
+                // Arrange — service throws InvalidDataException for disallowed sort
+                when(orderService.getOrders(any(OrderFilterDTO.class), any(Pageable.class)))
+                        .thenThrow(new InvalidDataException("Sorting by 'email' is not allowed"));
+
+                // Act & Assert
+                mockMvc.perform(get(ORDERS_URL)
+                                .param("sort", "email,asc"))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.status").value(400))
+                        .andExpect(jsonPath("$.message").value("Sorting by 'email' is not allowed"));
+            }
+        }
+
+        // ==================== NOT FOUND CASES (404) ====================
+
+        @Nested
+        @DisplayName("Not found cases — 404 Not Found")
+        class NotFoundCases {
+
+            @Test
+            @DisplayName("Should return 404 when customer profile is not found in database")
+            @WithMockUser(roles = "USER")
+            void shouldReturn404_whenCustomerNotFound() throws Exception {
+                // Arrange
+                when(orderService.getOrders(any(OrderFilterDTO.class), any(Pageable.class)))
+                        .thenThrow(new CustomerNotFoundException("Profile not found"));
+
+                // Act & Assert
+                mockMvc.perform(get(ORDERS_URL))
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.status").value(404))
+                        .andExpect(jsonPath("$.message").value("Profile not found"));
+            }
+        }
+
+        // ==================== SERVICE EXCEPTION HANDLING (500) ====================
+
+        @Nested
+        @DisplayName("Service exception handling — 500 Internal Server Error")
+        class ServiceExceptionHandling {
+
+            @Test
+            @DisplayName("Should return 500 when service throws an unexpected RuntimeException")
+            @WithMockUser(roles = "USER")
+            void shouldReturn500_whenServiceThrowsRuntimeException() throws Exception {
+                // Arrange
+                when(orderService.getOrders(any(OrderFilterDTO.class), any(Pageable.class)))
+                        .thenThrow(new RuntimeException("Database connection lost"));
+
+                // Act & Assert
+                mockMvc.perform(get(ORDERS_URL))
+                        .andExpect(status().isInternalServerError())
+                        .andExpect(jsonPath("$.status").value(500))
+                        .andExpect(jsonPath("$.message").value("An unexpected error occurred."));
+            }
+
+            @Test
+            @DisplayName("Should return 500 when service throws an unexpected IllegalStateException")
+            @WithMockUser(roles = "USER")
+            void shouldReturn500_whenServiceThrowsIllegalStateException() throws Exception {
+                // Arrange
+                when(orderService.getOrders(any(OrderFilterDTO.class), any(Pageable.class)))
+                        .thenThrow(new IllegalStateException("Unexpected internal state"));
+
+                // Act & Assert
+                mockMvc.perform(get(ORDERS_URL))
+                        .andExpect(status().isInternalServerError())
+                        .andExpect(jsonPath("$.status").value(500))
+                        .andExpect(jsonPath("$.message").value("An unexpected error occurred."));
+            }
+        }
+
+        // ==================== JSON RESPONSE STRUCTURE ====================
+
+        @Nested
+        @DisplayName("JSON response structure validation")
+        class JsonResponseStructure {
+
+            @Test
+            @DisplayName("Should return all expected fields in a paginated success response")
+            @WithMockUser(roles = "USER")
+            void shouldReturnAllPaginationFieldsInResponse() throws Exception {
+                // Arrange
+                when(orderService.getOrders(any(OrderFilterDTO.class), any(Pageable.class)))
+                        .thenReturn(singleOrderPage());
+
+                // Act & Assert
+                mockMvc.perform(get(ORDERS_URL))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.content").isArray())
+                        .andExpect(jsonPath("$.totalElements").isNumber())
+                        .andExpect(jsonPath("$.totalPages").isNumber())
+                        .andExpect(jsonPath("$.size").isNumber())
+                        .andExpect(jsonPath("$.number").isNumber());
+            }
+
+            @Test
+            @DisplayName("Should return all expected order summary fields in the content array")
+            @WithMockUser(roles = "USER")
+            void shouldReturnAllOrderSummaryFields() throws Exception {
+                // Arrange
+                when(orderService.getOrders(any(OrderFilterDTO.class), any(Pageable.class)))
+                        .thenReturn(singleOrderPage());
+
+                // Act & Assert
+                mockMvc.perform(get(ORDERS_URL))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.content[0].id").exists())
+                        .andExpect(jsonPath("$.content[0].status").exists())
+                        .andExpect(jsonPath("$.content[0].totalPrice").exists())
+                        .andExpect(jsonPath("$.content[0].shippingAddress").exists())
+                        .andExpect(jsonPath("$.content[0].createdAt").exists());
+            }
+
+            @Test
+            @DisplayName("Error response should contain status, message, and timeStamp fields")
+            @WithMockUser(roles = "USER")
+            void shouldReturnErrorResponseStructure() throws Exception {
+                // Arrange — trigger a business validation error
+                when(orderService.getOrders(any(OrderFilterDTO.class), any(Pageable.class)))
+                        .thenThrow(new InvalidDataException("Sorting by 'badField' is not allowed"));
+
+                // Act & Assert
+                mockMvc.perform(get(ORDERS_URL))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.status").value(400))
+                        .andExpect(jsonPath("$.message").isNotEmpty())
+                        .andExpect(jsonPath("$.timeStamp").isNumber());
+            }
+        }
+
+        // ==================== EDGE CASES ====================
+
+        @Nested
+        @DisplayName("Edge cases")
+        class EdgeCases {
+
+            @Test
+            @DisplayName("Should return 200 when no status filter is provided (null status)")
+            @WithMockUser(roles = "USER")
+            void shouldReturn200_whenNoStatusFilterProvided() throws Exception {
+                // Arrange
+                when(orderService.getOrders(any(OrderFilterDTO.class), any(Pageable.class)))
+                        .thenReturn(singleOrderPage());
+
+                // Act & Assert — no ?status= parameter at all
+                mockMvc.perform(get(ORDERS_URL))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.content").isArray());
+
+                verify(orderService).getOrders(any(OrderFilterDTO.class), any(Pageable.class));
+            }
+
+            @Test
+            @DisplayName("Should return 200 with correct pagination metadata when on second page")
+            @WithMockUser(roles = "USER")
+            void shouldReturn200_withCorrectPaginationOnSecondPage() throws Exception {
+                // Arrange — simulate second page with 5 total elements, page size 2
+                OrderSummaryResponseDTO summary = buildSummary(ORDER_ID_2, Status.SHIPPED, 9000L);
+                Page<OrderSummaryResponseDTO> secondPage =
+                        new PageImpl<>(List.of(summary), PageRequest.of(1, 2), 5);
+
+                when(orderService.getOrders(any(OrderFilterDTO.class), any(Pageable.class)))
+                        .thenReturn(secondPage);
+
+                // Act & Assert
+                mockMvc.perform(get(ORDERS_URL)
+                                .param("page", "1")
+                                .param("size", "2"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.number").value(1))
+                        .andExpect(jsonPath("$.size").value(2))
+                        .andExpect(jsonPath("$.totalElements").value(5))
+                        .andExpect(jsonPath("$.totalPages").value(3))
+                        .andExpect(jsonPath("$.content", hasSize(1)));
+            }
+
+            @Test
+            @DisplayName("Should return 200 when status filter and pagination are combined")
+            @WithMockUser(roles = "USER")
+            void shouldReturn200_whenFilterAndPaginationCombined() throws Exception {
+                // Arrange
+                OrderSummaryResponseDTO shippedSummary = buildSummary(ORDER_ID_1, Status.SHIPPED, 11000L);
+                Page<OrderSummaryResponseDTO> filteredPage =
+                        new PageImpl<>(List.of(shippedSummary), PageRequest.of(0, 5), 1);
+
+                when(orderService.getOrders(any(OrderFilterDTO.class), any(Pageable.class)))
+                        .thenReturn(filteredPage);
+
+                // Act & Assert
+                mockMvc.perform(get(ORDERS_URL)
+                                .param("status", "SHIPPED")
+                                .param("page", "0")
+                                .param("size", "5"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.content", hasSize(1)))
+                        .andExpect(jsonPath("$.content[0].status").value("SHIPPED"));
             }
         }
     }
