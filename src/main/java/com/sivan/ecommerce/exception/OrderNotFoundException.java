@@ -1,6 +1,6 @@
 package com.sivan.ecommerce.exception;
 
-public class OrderNotFoundException extends ResourceConflictException {
+public class OrderNotFoundException extends ResourceNotFoundException {
 
     public OrderNotFoundException(String message) {
         super(message);
