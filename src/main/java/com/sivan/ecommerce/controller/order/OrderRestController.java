@@ -14,6 +14,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.UUID;
+
 @RestController
 @RequestMapping("/orders")
 @Validated // CRITICAL: This enables @NotBlank to work on the String parameter!
@@ -35,5 +37,10 @@ public class OrderRestController {
     @GetMapping
     public ResponseEntity<Page<OrderSummaryResponseDTO>> getOrders(OrderFilterDTO orderFilterDTO, Pageable pageable) {
         return ResponseEntity.ok().body(orderService.getOrders(orderFilterDTO, pageable));
+    }
+
+    @GetMapping("/{orderId}")
+    public ResponseEntity<OrderResponseDTO> getOrder(@PathVariable UUID orderId) {
+        return ResponseEntity.ok().body(orderService.getOrder(orderId));
     }
 }
