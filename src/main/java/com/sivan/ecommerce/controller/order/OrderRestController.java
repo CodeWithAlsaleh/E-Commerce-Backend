@@ -1,10 +1,14 @@
 package com.sivan.ecommerce.controller.order;
 
+import com.sivan.ecommerce.dto.order.OrderFilterDTO;
 import com.sivan.ecommerce.dto.order.OrderRequestDTO;
 import com.sivan.ecommerce.dto.order.OrderResponseDTO;
+import com.sivan.ecommerce.dto.order.OrderSummaryResponseDTO;
 import com.sivan.ecommerce.service.order.OrderService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -26,5 +30,10 @@ public class OrderRestController {
                                                        @RequestBody @Valid OrderRequestDTO orderRequestDTO) {
 
         return ResponseEntity.status(HttpStatus.CREATED).body(orderService.placeOrder(idempotencyKey, orderRequestDTO));
+    }
+
+    @GetMapping
+    public ResponseEntity<Page<OrderSummaryResponseDTO>> getOrders(OrderFilterDTO orderFilterDTO, Pageable pageable) {
+        return ResponseEntity.ok().body(orderService.getOrders(orderFilterDTO, pageable));
     }
 }
