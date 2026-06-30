@@ -21,6 +21,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingPathVariableException;
 import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import org.springframework.http.HttpMethod;
@@ -635,6 +636,95 @@ class GlobalExceptionHandlerTest {
         }
     }
 
+    // ==================== HttpRequestMethodNotSupportedException (405) ====================
+
+    @Nested
+    @DisplayName("HttpRequestMethodNotSupportedException → 405")
+    class HttpRequestMethodNotSupportedHandler {
+
+        @Test
+        @DisplayName("Should return 405 with descriptive message including the unsupported method")
+        void shouldReturn405_withUnsupportedMethodMessage() {
+            // Arrange
+            HttpRequestMethodNotSupportedException exception =
+                    new HttpRequestMethodNotSupportedException("DELETE", java.util.List.of("GET", "POST"));
+
+            // Act
+            ResponseEntity<ErrorResponse> response = handler.handleException(exception);
+
+            // Assert
+            assertEquals(HttpStatus.METHOD_NOT_ALLOWED, response.getStatusCode());
+            assertNotNull(response.getBody());
+            assertEquals(405, response.getBody().getStatus());
+            assertEquals("The DELETE method is not supported for this endpoint", response.getBody().getMessage());
+        }
+
+        @Test
+        @DisplayName("Should include Allow header with supported HTTP methods")
+        void shouldIncludeAllowHeader_withSupportedMethods() {
+            // Arrange
+            HttpRequestMethodNotSupportedException exception =
+                    new HttpRequestMethodNotSupportedException("PATCH", java.util.List.of("GET", "PUT"));
+
+            // Act
+            ResponseEntity<ErrorResponse> response = handler.handleException(exception);
+
+            // Assert
+            assertNotNull(response.getHeaders().getAllow());
+            assertFalse(response.getHeaders().getAllow().isEmpty(), "Allow header should contain supported methods");
+            assertTrue(response.getHeaders().getAllow().contains(HttpMethod.GET));
+            assertTrue(response.getHeaders().getAllow().contains(HttpMethod.PUT));
+        }
+
+        @Test
+        @DisplayName("Should include the rejected method name in the error message")
+        void shouldIncludeRejectedMethodName() {
+            // Arrange
+            HttpRequestMethodNotSupportedException exception =
+                    new HttpRequestMethodNotSupportedException("POST", java.util.List.of("GET"));
+
+            // Act
+            ResponseEntity<ErrorResponse> response = handler.handleException(exception);
+
+            // Assert
+            assertNotNull(response.getBody());
+            assertTrue(response.getBody().getMessage().contains("POST"));
+        }
+
+        @Test
+        @DisplayName("Should include timeStamp in 405 error response")
+        void shouldIncludeTimeStamp_in405Response() {
+            // Arrange
+            long beforeTime = System.currentTimeMillis();
+            HttpRequestMethodNotSupportedException exception =
+                    new HttpRequestMethodNotSupportedException("PUT", java.util.List.of("GET"));
+
+            // Act
+            ResponseEntity<ErrorResponse> response = handler.handleException(exception);
+            long afterTime = System.currentTimeMillis();
+
+            // Assert
+            assertNotNull(response.getBody());
+            assertTrue(response.getBody().getTimeStamp() >= beforeTime);
+            assertTrue(response.getBody().getTimeStamp() <= afterTime);
+        }
+
+        @Test
+        @DisplayName("HTTP status in ResponseEntity should match status field in ErrorResponse body")
+        void httpStatusShouldMatchBodyStatus() {
+            // Arrange
+            HttpRequestMethodNotSupportedException exception =
+                    new HttpRequestMethodNotSupportedException("DELETE", java.util.List.of("GET"));
+
+            // Act
+            ResponseEntity<ErrorResponse> response = handler.handleException(exception);
+
+            // Assert
+            assertNotNull(response.getBody());
+            assertEquals(response.getStatusCode().value(), response.getBody().getStatus());
+        }
+    }
+
     // ==================== Error Response Structure ====================
 
     @Nested
@@ -664,6 +754,11 @@ class GlobalExceptionHandlerTest {
             ResponseEntity<ErrorResponse> response409 =
                     handler.handleException(new ResourceConflictException("duplicate"));
             assertValidErrorResponse(response409, 409);
+
+            // 405 — HttpRequestMethodNotSupported
+            ResponseEntity<ErrorResponse> response405 =
+                    handler.handleException(new HttpRequestMethodNotSupportedException("DELETE", java.util.List.of("GET")));
+            assertValidErrorResponse(response405, 405);
 
             // 400 — MissingRequestHeader
             ResponseEntity<ErrorResponse> responseHeader =
@@ -703,6 +798,12 @@ class GlobalExceptionHandlerTest {
                     handler.handleException(new ResourceConflictException("err"));
             assertNotNull(response409.getBody());
             assertEquals(response409.getStatusCode().value(), response409.getBody().getStatus());
+
+            // 405 - HttpRequestMethodNotSupported
+            ResponseEntity<ErrorResponse> response405 =
+                    handler.handleException(new HttpRequestMethodNotSupportedException("DELETE", java.util.List.of("GET")));
+            assertNotNull(response405.getBody());
+            assertEquals(response405.getStatusCode().value(), response405.getBody().getStatus());
 
             // 400 - MissingRequestHeader
             ResponseEntity<ErrorResponse> responseHeader =
