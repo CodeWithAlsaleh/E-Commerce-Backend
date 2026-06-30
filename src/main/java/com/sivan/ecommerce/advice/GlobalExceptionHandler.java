@@ -6,9 +6,11 @@ import com.sivan.ecommerce.exception.ResourceNotFoundException;
 import com.sivan.ecommerce.response.ErrorResponse;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingPathVariableException;
 import org.springframework.web.bind.MissingRequestHeaderException;
@@ -17,6 +19,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @ControllerAdvice
@@ -78,6 +81,20 @@ public class GlobalExceptionHandler {
                 .collect(Collectors.joining(", "));
 
         return buildError(HttpStatus.BAD_REQUEST, errorMessage);
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleException(HttpRequestMethodNotSupportedException exception) {
+        String errorMessage = "The %s method is not supported for this endpoint"
+                .formatted(exception.getMethod());
+
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+                .allow(Objects.requireNonNull(exception.getSupportedHttpMethods()).toArray(new HttpMethod[0]))
+                .body(new ErrorResponse(
+                        HttpStatus.METHOD_NOT_ALLOWED.value(),
+                        errorMessage,
+                        System.currentTimeMillis()
+                ));
     }
 
     // ==================== Custom exceptions ====================
