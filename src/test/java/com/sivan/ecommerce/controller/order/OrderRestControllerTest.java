@@ -103,7 +103,7 @@ class OrderRestControllerTest {
             );
             return new OrderResponseDTO(
                     VALID_ORDER_ID, Status.PENDING, VALID_TOTAL_PRICE,
-                    VALID_SHIPPING_ADDRESS, Instant.now(), Set.of(orderItem)
+                    VALID_SHIPPING_ADDRESS, Instant.now(), Instant.now(), Set.of(orderItem)
             );
         }
 
@@ -167,7 +167,7 @@ class OrderRestControllerTest {
                 // Arrange — service returns an existing order on duplicate key
                 OrderResponseDTO existingOrderResponse = new OrderResponseDTO(
                         VALID_ORDER_ID, Status.PENDING, VALID_TOTAL_PRICE,
-                        VALID_SHIPPING_ADDRESS, Instant.now(),
+                        VALID_SHIPPING_ADDRESS, Instant.now(), Instant.now(),
                         Set.of(new OrderItemResponseDTO(VALID_PRODUCT_ID, VALID_PRODUCT_TITLE, VALID_QUANTITY, VALID_LOCKED_PRICE))
                 );
                 when(orderService.placeOrder(eq(VALID_IDEMPOTENCY_KEY), any(OrderRequestDTO.class)))
@@ -390,7 +390,7 @@ class OrderRestControllerTest {
 
                 OrderResponseDTO response = new OrderResponseDTO(
                         VALID_ORDER_ID, Status.PENDING, VALID_TOTAL_PRICE,
-                        maxAddress, Instant.now(),
+                        maxAddress, Instant.now(), Instant.now(),
                         Set.of(new OrderItemResponseDTO(VALID_PRODUCT_ID, VALID_PRODUCT_TITLE, VALID_QUANTITY, VALID_LOCKED_PRICE))
                 );
                 when(orderService.placeOrder(eq(VALID_IDEMPOTENCY_KEY), any(OrderRequestDTO.class)))
@@ -653,6 +653,7 @@ class OrderRestControllerTest {
                         .andExpect(jsonPath("$.totalPrice").exists())
                         .andExpect(jsonPath("$.shippingAddress").exists())
                         .andExpect(jsonPath("$.createdAt").exists())
+                        .andExpect(jsonPath("$.updatedAt").exists())
                         .andExpect(jsonPath("$.orderItems").exists())
                         .andExpect(jsonPath("$.orderItems").isArray());
             }
@@ -737,7 +738,7 @@ class OrderRestControllerTest {
 
                 OrderResponseDTO response = new OrderResponseDTO(
                         VALID_ORDER_ID, Status.PENDING, VALID_TOTAL_PRICE,
-                        specialAddress, Instant.now(),
+                        specialAddress, Instant.now(), Instant.now(),
                         Set.of(new OrderItemResponseDTO(VALID_PRODUCT_ID, VALID_PRODUCT_TITLE, VALID_QUANTITY, VALID_LOCKED_PRICE))
                 );
                 when(orderService.placeOrder(eq(VALID_IDEMPOTENCY_KEY), any(OrderRequestDTO.class)))
@@ -784,7 +785,7 @@ class OrderRestControllerTest {
                 );
                 OrderResponseDTO response = new OrderResponseDTO(
                         VALID_ORDER_ID, Status.PENDING, 13000L,
-                        VALID_SHIPPING_ADDRESS, Instant.now(), Set.of(item1, item2)
+                        VALID_SHIPPING_ADDRESS, Instant.now(), Instant.now(), Set.of(item1, item2)
                 );
 
                 when(orderService.placeOrder(eq(VALID_IDEMPOTENCY_KEY), any(OrderRequestDTO.class)))
@@ -816,7 +817,7 @@ class OrderRestControllerTest {
         // ======================== Helpers ========================
 
         private OrderSummaryResponseDTO buildSummary(UUID id, Status status, long totalPrice) {
-            return new OrderSummaryResponseDTO(id, status, totalPrice, VALID_SHIPPING_ADDRESS, Instant.now());
+            return new OrderSummaryResponseDTO(id, status, totalPrice, VALID_SHIPPING_ADDRESS, Instant.now(), Instant.now());
         }
 
         private Page<OrderSummaryResponseDTO> singleOrderPage() {
@@ -851,7 +852,8 @@ class OrderRestControllerTest {
                         .andExpect(jsonPath("$.content[0].status").value("PENDING"))
                         .andExpect(jsonPath("$.content[0].totalPrice").value(VALID_TOTAL_PRICE))
                         .andExpect(jsonPath("$.content[0].shippingAddress").value(VALID_SHIPPING_ADDRESS))
-                        .andExpect(jsonPath("$.content[0].createdAt").exists());
+                        .andExpect(jsonPath("$.content[0].createdAt").exists())
+                        .andExpect(jsonPath("$.content[0].updatedAt").exists());
 
                 verify(orderService).getOrders(any(OrderFilterDTO.class), any(Pageable.class));
             }
@@ -1268,7 +1270,8 @@ class OrderRestControllerTest {
                         .andExpect(jsonPath("$.content[0].status").exists())
                         .andExpect(jsonPath("$.content[0].totalPrice").exists())
                         .andExpect(jsonPath("$.content[0].shippingAddress").exists())
-                        .andExpect(jsonPath("$.content[0].createdAt").exists());
+                        .andExpect(jsonPath("$.content[0].createdAt").exists())
+                        .andExpect(jsonPath("$.content[0].updatedAt").exists());
             }
 
             @Test
@@ -1371,7 +1374,7 @@ class OrderRestControllerTest {
             );
             return new OrderResponseDTO(
                     VALID_ORDER_ID, Status.PENDING, VALID_TOTAL_PRICE,
-                    VALID_SHIPPING_ADDRESS, Instant.now(), Set.of(orderItem)
+                    VALID_SHIPPING_ADDRESS, Instant.now(), Instant.now(), Set.of(orderItem)
             );
         }
 
@@ -1396,6 +1399,7 @@ class OrderRestControllerTest {
                         .andExpect(jsonPath("$.totalPrice").value(VALID_TOTAL_PRICE))
                         .andExpect(jsonPath("$.shippingAddress").value(VALID_SHIPPING_ADDRESS))
                         .andExpect(jsonPath("$.createdAt").exists())
+                        .andExpect(jsonPath("$.updatedAt").exists())
                         .andExpect(jsonPath("$.orderItems").isArray())
                         .andExpect(jsonPath("$.orderItems[0].productId").value(VALID_PRODUCT_ID.toString()))
                         .andExpect(jsonPath("$.orderItems[0].productTitle").value(VALID_PRODUCT_TITLE))
@@ -1636,6 +1640,7 @@ class OrderRestControllerTest {
                         .andExpect(jsonPath("$.totalPrice").exists())
                         .andExpect(jsonPath("$.shippingAddress").exists())
                         .andExpect(jsonPath("$.createdAt").exists())
+                        .andExpect(jsonPath("$.updatedAt").exists())
                         .andExpect(jsonPath("$.orderItems").exists())
                         .andExpect(jsonPath("$.orderItems").isArray());
             }
@@ -1694,7 +1699,7 @@ class OrderRestControllerTest {
                 );
                 OrderResponseDTO response = new OrderResponseDTO(
                         VALID_ORDER_ID, Status.PENDING, 13000L,
-                        VALID_SHIPPING_ADDRESS, Instant.now(), Set.of(item1, item2)
+                        VALID_SHIPPING_ADDRESS, Instant.now(), Instant.now(), Set.of(item1, item2)
                 );
 
                 when(orderService.getOrder(VALID_ORDER_ID)).thenReturn(response);
@@ -1718,7 +1723,7 @@ class OrderRestControllerTest {
                 );
                 OrderResponseDTO response = new OrderResponseDTO(
                         VALID_ORDER_ID, Status.DELIVERED, VALID_TOTAL_PRICE,
-                        specialAddress, Instant.now(), Set.of(orderItem)
+                        specialAddress, Instant.now(), Instant.now(), Set.of(orderItem)
                 );
 
                 when(orderService.getOrder(VALID_ORDER_ID)).thenReturn(response);
@@ -1739,7 +1744,7 @@ class OrderRestControllerTest {
                 );
                 OrderResponseDTO response = new OrderResponseDTO(
                         VALID_ORDER_ID, Status.SHIPPED, VALID_TOTAL_PRICE,
-                        VALID_SHIPPING_ADDRESS, Instant.now(), Set.of(orderItem)
+                        VALID_SHIPPING_ADDRESS, Instant.now(), Instant.now(), Set.of(orderItem)
                 );
 
                 when(orderService.getOrder(VALID_ORDER_ID)).thenReturn(response);
@@ -1760,7 +1765,7 @@ class OrderRestControllerTest {
                 );
                 OrderResponseDTO response = new OrderResponseDTO(
                         VALID_ORDER_ID, Status.CANCELED, VALID_TOTAL_PRICE,
-                        VALID_SHIPPING_ADDRESS, Instant.now(), Set.of(orderItem)
+                        VALID_SHIPPING_ADDRESS, Instant.now(), Instant.now(), Set.of(orderItem)
                 );
 
                 when(orderService.getOrder(VALID_ORDER_ID)).thenReturn(response);
@@ -1783,7 +1788,7 @@ class OrderRestControllerTest {
                 );
                 OrderResponseDTO response = new OrderResponseDTO(
                         differentOrderId, Status.PENDING, VALID_TOTAL_PRICE,
-                        VALID_SHIPPING_ADDRESS, Instant.now(), Set.of(orderItem)
+                        VALID_SHIPPING_ADDRESS, Instant.now(), Instant.now(), Set.of(orderItem)
                 );
 
                 when(orderService.getOrder(differentOrderId)).thenReturn(response);

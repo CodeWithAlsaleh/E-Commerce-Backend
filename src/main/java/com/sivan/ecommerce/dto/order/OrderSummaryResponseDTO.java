@@ -9,5 +9,6 @@ public record OrderSummaryResponseDTO(UUID id,
                                       Status status,
                                       long totalPrice,
                                       String shippingAddress,
-                                      Instant createdAt) {
+                                      Instant createdAt,
+                                      Instant updatedAt) {
 }

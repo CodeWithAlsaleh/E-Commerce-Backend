@@ -42,6 +42,7 @@ class OrderMapperTest {
 
             Instant now = Instant.now();
             ReflectionTestUtils.setField(order, "createdAt", now);
+            ReflectionTestUtils.setField(order, "updatedAt", now);
 
             // Act
             OrderResponseDTO response = OrderMapper.mapOrderToOrderResponse(order);
@@ -53,6 +54,7 @@ class OrderMapperTest {
             assertEquals(VALID_TOTAL_PRICE, response.totalPrice());
             assertEquals(VALID_SHIPPING_ADDRESS, response.shippingAddress());
             assertEquals(now, response.createdAt());
+            assertEquals(now, response.updatedAt());
             assertNotNull(response.orderItems());
             assertTrue(response.orderItems().isEmpty());
         }
@@ -136,11 +138,12 @@ class OrderMapperTest {
         }
 
         @Test
-        @DisplayName("Should handle null createdAt (pre-persist state or absent auditing)")
-        void shouldHandleNullCreatedAt() {
+        @DisplayName("Should handle null createdAt & updatedAt (pre-persist state or absent auditing)")
+        void shouldHandleNullCreatedAtAndUpdatedAt() {
             // Arrange
             Order order = new Order(null, VALID_STATUS, VALID_TOTAL_PRICE, VALID_SHIPPING_ADDRESS);
             // createdAt is left as null
+            // updatedAt is left as null
 
             // Act
             OrderResponseDTO response = OrderMapper.mapOrderToOrderResponse(order);
@@ -148,6 +151,7 @@ class OrderMapperTest {
             // Assert
             assertNotNull(response);
             assertNull(response.createdAt());
+            assertNull(response.updatedAt());
         }
     }
 }

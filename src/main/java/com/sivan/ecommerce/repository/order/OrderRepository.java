@@ -39,7 +39,8 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
                         o.status,
                         o.totalPrice,
                         o.shippingAddress,
-                        o.createdAt)
+                        o.createdAt,
+                        o.updatedAt)
             FROM Order o
             WHERE o.customer.id = :customerId AND
             (:status IS NULL OR o.status = :status)

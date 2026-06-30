@@ -16,6 +16,7 @@ public class OrderMapper {
                 order.getTotalPrice(),
                 order.getShippingAddress(),
                 order.getCreatedAt(),
+                order.getUpdatedAt(),
                 OrderItemMapper.mapOrderItemsToOrderItemsResponse(order.getOrderItems())
         );
     }

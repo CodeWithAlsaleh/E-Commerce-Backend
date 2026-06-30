@@ -11,5 +11,6 @@ public record OrderResponseDTO(UUID id,
                                long totalPrice,
                                String shippingAddress,
                                Instant createdAt,
+                               Instant updatedAt,
                                Set<OrderItemResponseDTO> orderItems) {
 }

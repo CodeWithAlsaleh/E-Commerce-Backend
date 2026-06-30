@@ -1248,7 +1248,7 @@ class OrderServiceImplTest {
 
                 OrderSummaryResponseDTO summary = new OrderSummaryResponseDTO(
                         UUID.randomUUID(), Status.PENDING, 7500L,
-                        VALID_SHIPPING_ADDRESS, Instant.now()
+                        VALID_SHIPPING_ADDRESS, Instant.now(), Instant.now()
                 );
                 Page<OrderSummaryResponseDTO> expectedPage = new PageImpl<>(
                         List.of(summary), PageRequest.of(0, 10, Sort.by("createdAt").descending()), 1
@@ -1287,7 +1287,7 @@ class OrderServiceImplTest {
 
                 OrderSummaryResponseDTO shippedOrder = new OrderSummaryResponseDTO(
                         UUID.randomUUID(), Status.SHIPPED, 15000L,
-                        VALID_SHIPPING_ADDRESS, Instant.now()
+                        VALID_SHIPPING_ADDRESS, Instant.now(), Instant.now()
                 );
                 Pageable pageable = PageRequest.of(0, 10, Sort.by("createdAt").descending());
                 Page<OrderSummaryResponseDTO> expectedPage = new PageImpl<>(
@@ -1810,11 +1810,11 @@ class OrderServiceImplTest {
 
                 OrderSummaryResponseDTO order1 = new OrderSummaryResponseDTO(
                         UUID.randomUUID(), Status.PENDING, 5000L,
-                        VALID_SHIPPING_ADDRESS, Instant.now()
+                        VALID_SHIPPING_ADDRESS, Instant.now(), Instant.now()
                 );
                 OrderSummaryResponseDTO order2 = new OrderSummaryResponseDTO(
                         UUID.randomUUID(), Status.SHIPPED, 12000L,
-                        "456 Oak Ave, LA, CA 90001", Instant.now()
+                        "456 Oak Ave, LA, CA 90001", Instant.now(), Instant.now()
                 );
 
                 OrderFilterDTO filter = new OrderFilterDTO(null);
