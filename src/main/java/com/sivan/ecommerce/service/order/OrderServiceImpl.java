@@ -9,12 +9,14 @@ import com.sivan.ecommerce.entity.customer.Customer;
 import com.sivan.ecommerce.entity.order.Order;
 import com.sivan.ecommerce.entity.order.OrderItem;
 import com.sivan.ecommerce.entity.order.Status;
+import com.sivan.ecommerce.entity.outbox.InventoryOutbox;
 import com.sivan.ecommerce.entity.product.Product;
 import com.sivan.ecommerce.exception.*;
 import com.sivan.ecommerce.mapper.order.OrderMapper;
 import com.sivan.ecommerce.repository.cart.CartItemRepository;
 import com.sivan.ecommerce.repository.customer.CustomerRepository;
 import com.sivan.ecommerce.repository.order.OrderRepository;
+import com.sivan.ecommerce.repository.outbox.InventoryOutboxRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -33,16 +35,19 @@ public class OrderServiceImpl implements OrderService {
     private final OrderRepository orderRepository;
     private final CustomerRepository customerRepository;
     private final CartItemRepository cartItemRepository;
+    private final InventoryOutboxRepository inventoryOutboxRepository;
 
     private static final Set<String> ALLOWED_SORTS = Set.of("totalPrice", "createdAt");
 
     public OrderServiceImpl(OrderRepository orderRepository,
                             CustomerRepository customerRepository,
-                            CartItemRepository cartItemRepository) {
+                            CartItemRepository cartItemRepository,
+                            InventoryOutboxRepository inventoryOutboxRepository) {
 
         this.orderRepository = orderRepository;
         this.customerRepository = customerRepository;
         this.cartItemRepository = cartItemRepository;
+        this.inventoryOutboxRepository = inventoryOutboxRepository;
     }
 
     @Override
@@ -117,6 +122,31 @@ public class OrderServiceImpl implements OrderService {
                 .orElseThrow(() -> new OrderNotFoundException("Order not found"));
 
         return OrderMapper.mapOrderToOrderResponse(order);
+    }
+
+    @Override
+    @Transactional
+    public OrderResponseDTO cancelOrder(UUID orderId) {
+        Customer customer = getCurrentCustomer();
+
+        Order order = orderRepository.findByCustomerIdAndOrderId(customer.getId(), orderId)
+                .orElseThrow(() -> new OrderNotFoundException("Order not found"));
+
+        if (order.getStatus() != Status.PENDING) {
+            throw new OrderStateConflictException("Order cannot be canceled because it has already been %s"
+                    .formatted(order.getStatus().name().toLowerCase()));
+        }
+
+        order.setStatus(Status.CANCELED);
+
+        try {
+            inventoryOutboxRepository.save(new InventoryOutbox(order));
+
+            // We need to flush in order to force Hibernate to update "updatedAt" field
+            return OrderMapper.mapOrderToOrderResponse(orderRepository.saveAndFlush(order));
+        } catch (DataIntegrityViolationException exception) {
+            throw new OrderStateConflictException("Order already has been canceled. Please refresh");
+        }
     }
 
     private Customer getCurrentCustomer() {

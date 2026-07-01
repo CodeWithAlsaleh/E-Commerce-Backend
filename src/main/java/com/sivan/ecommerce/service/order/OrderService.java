@@ -16,4 +16,6 @@ public interface OrderService {
     Page<OrderSummaryResponseDTO> getOrders(OrderFilterDTO orderFilterDTO, Pageable pageable);
 
     OrderResponseDTO getOrder(UUID orderId);
+
+    OrderResponseDTO cancelOrder(UUID orderId);
 }
