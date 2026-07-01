@@ -12,15 +12,18 @@ import com.sivan.ecommerce.entity.customer.Customer;
 import com.sivan.ecommerce.entity.order.Order;
 import com.sivan.ecommerce.entity.order.OrderItem;
 import com.sivan.ecommerce.entity.order.Status;
+import com.sivan.ecommerce.entity.outbox.InventoryOutbox;
 import com.sivan.ecommerce.entity.product.Product;
 import com.sivan.ecommerce.exception.CustomerNotFoundException;
 import com.sivan.ecommerce.exception.InsufficientStockException;
 import com.sivan.ecommerce.exception.InvalidDataException;
 import com.sivan.ecommerce.exception.OrderNotFoundException;
+import com.sivan.ecommerce.exception.OrderStateConflictException;
 import com.sivan.ecommerce.exception.ResourceConflictException;
 import com.sivan.ecommerce.repository.cart.CartItemRepository;
 import com.sivan.ecommerce.repository.customer.CustomerRepository;
 import com.sivan.ecommerce.repository.order.OrderRepository;
+import com.sivan.ecommerce.repository.outbox.InventoryOutboxRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -68,6 +71,9 @@ class OrderServiceImplTest {
 
     @Mock
     private CartItemRepository cartItemRepository;
+
+    @Mock
+    private InventoryOutboxRepository inventoryOutboxRepository;
 
     @InjectMocks
     private OrderServiceImpl orderService;
@@ -2433,6 +2439,757 @@ class OrderServiceImplTest {
                 // Assert
                 verify(orderRepository).findByCustomerIdAndOrderId(customerId, orderId);
                 verifyNoMoreInteractions(orderRepository);
+            }
+        }
+    }
+
+    // ==================== cancelOrder() ====================
+    @Nested
+    @DisplayName("cancelOrder()")
+    class CancelOrder {
+
+        // ==================== cancelOrder() — SUCCESS CASES ====================
+
+        @Nested
+        @DisplayName("cancelOrder() — Success cases")
+        class CancelOrderSuccess {
+
+            @Test
+            @DisplayName("Should return OrderResponseDTO with CANCELED status when a PENDING order is canceled")
+            void shouldReturnOrderResponseDTO_withCanceledStatus_whenPendingOrderIsCanceled() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                UUID orderId = UUID.randomUUID();
+                UUID productId = UUID.randomUUID();
+
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+                Product product = buildActiveProduct(productId, "Wireless Headphones", PRODUCT_STOCK, PRODUCT_PRICE);
+
+                Order order = new Order(customer, Status.PENDING, 7500L, VALID_SHIPPING_ADDRESS);
+                EntityTestUtil.setId(order, orderId);
+                order.setIdempotencyKey(VALID_IDEMPOTENCY_KEY);
+                order.addOrderItem(new OrderItem(order, product, CART_ITEM_QUANTITY, PRODUCT_PRICE));
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(orderRepository.findByCustomerIdAndOrderId(customerId, orderId)).thenReturn(Optional.of(order));
+                when(orderRepository.saveAndFlush(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+
+                // Act
+                OrderResponseDTO response = orderService.cancelOrder(orderId);
+
+                // Assert
+                assertNotNull(response);
+                assertEquals(orderId, response.id());
+                assertEquals(Status.CANCELED, response.status());
+                assertEquals(7500L, response.totalPrice());
+                assertEquals(VALID_SHIPPING_ADDRESS, response.shippingAddress());
+            }
+
+            @Test
+            @DisplayName("Should return order items in the response DTO")
+            void shouldReturnOrderItems_inResponseDTO() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                UUID orderId = UUID.randomUUID();
+                UUID productId = UUID.randomUUID();
+
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+                Product product = buildActiveProduct(productId, "Mechanical Keyboard", 30, 8000L);
+
+                Order order = new Order(customer, Status.PENDING, 8000L, VALID_SHIPPING_ADDRESS);
+                EntityTestUtil.setId(order, orderId);
+                order.setIdempotencyKey("idem-key-cancel-items");
+                order.addOrderItem(new OrderItem(order, product, 1, 8000L));
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(orderRepository.findByCustomerIdAndOrderId(customerId, orderId)).thenReturn(Optional.of(order));
+                when(orderRepository.saveAndFlush(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+
+                // Act
+                OrderResponseDTO response = orderService.cancelOrder(orderId);
+
+                // Assert
+                assertNotNull(response.orderItems());
+                assertEquals(1, response.orderItems().size());
+
+                OrderItemResponseDTO item = response.orderItems().iterator().next();
+                assertEquals(productId, item.productId());
+                assertEquals("Mechanical Keyboard", item.productTitle());
+                assertEquals(1, item.quantity());
+                assertEquals(8000L, item.lockedPrice());
+            }
+
+            @Test
+            @DisplayName("Should save an InventoryOutbox entry for the canceled order")
+            void shouldSaveInventoryOutboxEntry_forCanceledOrder() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                UUID orderId = UUID.randomUUID();
+                UUID productId = UUID.randomUUID();
+
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+                Product product = buildActiveProduct(productId, "Wireless Headphones", PRODUCT_STOCK, PRODUCT_PRICE);
+
+                Order order = new Order(customer, Status.PENDING, 7500L, VALID_SHIPPING_ADDRESS);
+                EntityTestUtil.setId(order, orderId);
+                order.setIdempotencyKey(VALID_IDEMPOTENCY_KEY);
+                order.addOrderItem(new OrderItem(order, product, CART_ITEM_QUANTITY, PRODUCT_PRICE));
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(orderRepository.findByCustomerIdAndOrderId(customerId, orderId)).thenReturn(Optional.of(order));
+                when(orderRepository.saveAndFlush(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+
+                // Act
+                orderService.cancelOrder(orderId);
+
+                // Assert
+                verify(inventoryOutboxRepository).save(any(InventoryOutbox.class));
+                verifyNoMoreInteractions(inventoryOutboxRepository);
+            }
+
+            @Test
+            @DisplayName("Should set order status to CANCELED before saving")
+            void shouldSetOrderStatusToCanceled_beforeSaving() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                UUID orderId = UUID.randomUUID();
+                UUID productId = UUID.randomUUID();
+
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+                Product product = buildActiveProduct(productId, "Wireless Headphones", PRODUCT_STOCK, PRODUCT_PRICE);
+
+                Order order = new Order(customer, Status.PENDING, 7500L, VALID_SHIPPING_ADDRESS);
+                EntityTestUtil.setId(order, orderId);
+                order.setIdempotencyKey(VALID_IDEMPOTENCY_KEY);
+                order.addOrderItem(new OrderItem(order, product, CART_ITEM_QUANTITY, PRODUCT_PRICE));
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(orderRepository.findByCustomerIdAndOrderId(customerId, orderId)).thenReturn(Optional.of(order));
+
+                when(orderRepository.saveAndFlush(any(Order.class))).thenAnswer(inv -> {
+                    Order capturedOrder = inv.getArgument(0);
+
+                    // Verify the status was set to CANCELED before save
+                    assertEquals(Status.CANCELED, capturedOrder.getStatus());
+
+                    return capturedOrder;
+                });
+
+                // Act
+                orderService.cancelOrder(orderId);
+
+                // Assert
+                verify(orderRepository).saveAndFlush(any(Order.class));
+            }
+
+            @Test
+            @DisplayName("Should call saveAndFlush on the order repository exactly once")
+            void shouldCallSaveAndFlushExactlyOnce() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                UUID orderId = UUID.randomUUID();
+                UUID productId = UUID.randomUUID();
+
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+                Product product = buildActiveProduct(productId, "Wireless Headphones", PRODUCT_STOCK, PRODUCT_PRICE);
+
+                Order order = new Order(customer, Status.PENDING, 7500L, VALID_SHIPPING_ADDRESS);
+                EntityTestUtil.setId(order, orderId);
+                order.setIdempotencyKey(VALID_IDEMPOTENCY_KEY);
+                order.addOrderItem(new OrderItem(order, product, CART_ITEM_QUANTITY, PRODUCT_PRICE));
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(orderRepository.findByCustomerIdAndOrderId(customerId, orderId)).thenReturn(Optional.of(order));
+                when(orderRepository.saveAndFlush(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+
+                // Act
+                orderService.cancelOrder(orderId);
+
+                // Assert
+                verify(orderRepository).saveAndFlush(order);
+                verifyNoMoreInteractions(orderRepository);
+            }
+
+            @Test
+            @DisplayName("Should check queries order")
+            void shouldQueriesOrder() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                UUID orderId = UUID.randomUUID();
+                UUID productId = UUID.randomUUID();
+
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+                Product product = buildActiveProduct(productId, "Wireless Headphones", PRODUCT_STOCK, PRODUCT_PRICE);
+
+                Order order = new Order(customer, Status.PENDING, 7500L, VALID_SHIPPING_ADDRESS);
+                EntityTestUtil.setId(order, orderId);
+                order.setIdempotencyKey(VALID_IDEMPOTENCY_KEY);
+                order.addOrderItem(new OrderItem(order, product, CART_ITEM_QUANTITY, PRODUCT_PRICE));
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(orderRepository.findByCustomerIdAndOrderId(customerId, orderId)).thenReturn(Optional.of(order));
+                when(orderRepository.saveAndFlush(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+
+                // Act
+                orderService.cancelOrder(orderId);
+
+                // Assert — verify queries order
+                var inOrder = inOrder(customerRepository, orderRepository, inventoryOutboxRepository);
+
+                inOrder.verify(customerRepository).findByEmailWithCart(VALID_EMAIL.toLowerCase());
+                inOrder.verify(orderRepository).findByCustomerIdAndOrderId(customerId, orderId);
+                inOrder.verify(inventoryOutboxRepository).save(any(InventoryOutbox.class));
+                inOrder.verify(orderRepository).saveAndFlush(order);
+            }
+        }
+
+        // ==================== cancelOrder() — EMAIL LOWERCASING ====================
+
+        @Nested
+        @DisplayName("cancelOrder() — Email lowercasing")
+        class CancelOrderEmailLowercasing {
+
+            @Test
+            @DisplayName("Should lowercase the email before looking up the customer")
+            void shouldLowercaseEmail_beforeLookingUpCustomer() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                UUID orderId = UUID.randomUUID();
+                UUID productId = UUID.randomUUID();
+
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+                Product product = buildActiveProduct(productId, "Wireless Headphones", PRODUCT_STOCK, PRODUCT_PRICE);
+
+                Order order = new Order(customer, Status.PENDING, 7500L, VALID_SHIPPING_ADDRESS);
+                EntityTestUtil.setId(order, orderId);
+                order.setIdempotencyKey(VALID_IDEMPOTENCY_KEY);
+                order.addOrderItem(new OrderItem(order, product, CART_ITEM_QUANTITY, PRODUCT_PRICE));
+
+                // Simulate an uppercase email coming from the authentication context
+                stubAuthenticatedUser("JOHN.DOE@EXAMPLE.COM");
+                when(customerRepository.findByEmailWithCart("john.doe@example.com")).thenReturn(Optional.of(customer));
+                when(orderRepository.findByCustomerIdAndOrderId(customerId, orderId)).thenReturn(Optional.of(order));
+                when(orderRepository.saveAndFlush(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+
+                // Act
+                OrderResponseDTO response = orderService.cancelOrder(orderId);
+
+                // Assert
+                assertNotNull(response);
+                verify(customerRepository).findByEmailWithCart("john.doe@example.com");
+            }
+        }
+
+        // ==================== cancelOrder() — NOT FOUND CASES (CustomerNotFoundException) ====================
+
+        @Nested
+        @DisplayName("cancelOrder() — Customer not found")
+        class CancelOrderCustomerNotFound {
+
+            @Test
+            @DisplayName("Should throw CustomerNotFoundException when the authenticated customer does not exist")
+            void shouldThrowCustomerNotFoundException_whenCustomerDoesNotExist() {
+                // Arrange
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.empty());
+
+                // Act & Assert
+                CustomerNotFoundException exception = assertThrows(
+                        CustomerNotFoundException.class,
+                        () -> orderService.cancelOrder(UUID.randomUUID())
+                );
+                assertEquals("Profile not found", exception.getMessage());
+            }
+
+            @Test
+            @DisplayName("Should not interact with orderRepository or inventoryOutboxRepository when customer is not found")
+            void shouldNotInteractWithRepositories_whenCustomerIsNotFound() {
+                // Arrange
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.empty());
+
+                // Act
+                assertThrows(CustomerNotFoundException.class,
+                        () -> orderService.cancelOrder(UUID.randomUUID()));
+
+                // Assert
+                verifyNoInteractions(orderRepository);
+                verifyNoInteractions(inventoryOutboxRepository);
+            }
+        }
+
+        // ==================== cancelOrder() — NOT FOUND CASES (OrderNotFoundException) ====================
+
+        @Nested
+        @DisplayName("cancelOrder() — Order not found")
+        class CancelOrderNotFound {
+
+            @Test
+            @DisplayName("Should throw OrderNotFoundException when order does not exist for the customer")
+            void shouldThrowOrderNotFoundException_whenOrderDoesNotExist() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                UUID orderId = UUID.randomUUID();
+
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(orderRepository.findByCustomerIdAndOrderId(customerId, orderId)).thenReturn(Optional.empty());
+
+                // Act & Assert
+                OrderNotFoundException exception = assertThrows(
+                        OrderNotFoundException.class,
+                        () -> orderService.cancelOrder(orderId)
+                );
+                assertEquals("Order not found", exception.getMessage());
+            }
+
+            @Test
+            @DisplayName("Should not save anything when order is not found")
+            void shouldNotSaveAnything_whenOrderNotFound() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                UUID orderId = UUID.randomUUID();
+
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(orderRepository.findByCustomerIdAndOrderId(customerId, orderId)).thenReturn(Optional.empty());
+
+                // Act
+                assertThrows(OrderNotFoundException.class,
+                        () -> orderService.cancelOrder(orderId));
+
+                // Assert
+                verify(orderRepository, never()).saveAndFlush(any(Order.class));
+                verifyNoInteractions(inventoryOutboxRepository);
+            }
+        }
+
+        // ==================== cancelOrder() — ORDER STATE CONFLICT (non-PENDING) ====================
+
+        @Nested
+        @DisplayName("cancelOrder() — Order state conflict (non-PENDING)")
+        class CancelOrderStateConflict {
+
+            @Test
+            @DisplayName("Should throw OrderStateConflictException when order status is SHIPPED")
+            void shouldThrowOrderStateConflictException_whenOrderIsShipped() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                UUID orderId = UUID.randomUUID();
+                UUID productId = UUID.randomUUID();
+
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+                Product product = buildActiveProduct(productId, "Wireless Headphones", PRODUCT_STOCK, PRODUCT_PRICE);
+
+                Order order = new Order(customer, Status.SHIPPED, 7500L, VALID_SHIPPING_ADDRESS);
+                EntityTestUtil.setId(order, orderId);
+                order.setIdempotencyKey(VALID_IDEMPOTENCY_KEY);
+                order.addOrderItem(new OrderItem(order, product, CART_ITEM_QUANTITY, PRODUCT_PRICE));
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(orderRepository.findByCustomerIdAndOrderId(customerId, orderId)).thenReturn(Optional.of(order));
+
+                // Act & Assert
+                OrderStateConflictException exception = assertThrows(
+                        OrderStateConflictException.class,
+                        () -> orderService.cancelOrder(orderId)
+                );
+                assertEquals("Order cannot be canceled because it has already been shipped", exception.getMessage());
+            }
+
+            @Test
+            @DisplayName("Should throw OrderStateConflictException when order status is DELIVERED")
+            void shouldThrowOrderStateConflictException_whenOrderIsDelivered() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                UUID orderId = UUID.randomUUID();
+                UUID productId = UUID.randomUUID();
+
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+                Product product = buildActiveProduct(productId, "Wireless Headphones", PRODUCT_STOCK, PRODUCT_PRICE);
+
+                Order order = new Order(customer, Status.DELIVERED, 7500L, VALID_SHIPPING_ADDRESS);
+                EntityTestUtil.setId(order, orderId);
+                order.setIdempotencyKey(VALID_IDEMPOTENCY_KEY);
+                order.addOrderItem(new OrderItem(order, product, CART_ITEM_QUANTITY, PRODUCT_PRICE));
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(orderRepository.findByCustomerIdAndOrderId(customerId, orderId)).thenReturn(Optional.of(order));
+
+                // Act & Assert
+                OrderStateConflictException exception = assertThrows(
+                        OrderStateConflictException.class,
+                        () -> orderService.cancelOrder(orderId)
+                );
+                assertEquals("Order cannot be canceled because it has already been delivered", exception.getMessage());
+            }
+
+            @Test
+            @DisplayName("Should throw OrderStateConflictException when order status is already CANCELED")
+            void shouldThrowOrderStateConflictException_whenOrderIsAlreadyCanceled() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                UUID orderId = UUID.randomUUID();
+                UUID productId = UUID.randomUUID();
+
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+                Product product = buildActiveProduct(productId, "Wireless Headphones", PRODUCT_STOCK, PRODUCT_PRICE);
+
+                Order order = new Order(customer, Status.CANCELED, 7500L, VALID_SHIPPING_ADDRESS);
+                EntityTestUtil.setId(order, orderId);
+                order.setIdempotencyKey(VALID_IDEMPOTENCY_KEY);
+                order.addOrderItem(new OrderItem(order, product, CART_ITEM_QUANTITY, PRODUCT_PRICE));
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(orderRepository.findByCustomerIdAndOrderId(customerId, orderId)).thenReturn(Optional.of(order));
+
+                // Act & Assert
+                OrderStateConflictException exception = assertThrows(
+                        OrderStateConflictException.class,
+                        () -> orderService.cancelOrder(orderId)
+                );
+                assertEquals("Order cannot be canceled because it has already been canceled", exception.getMessage());
+            }
+
+            @Test
+            @DisplayName("Should include the lowercase status name in the exception message")
+            void shouldIncludeLowercaseStatusName_inExceptionMessage() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                UUID orderId = UUID.randomUUID();
+                UUID productId = UUID.randomUUID();
+
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+                Product product = buildActiveProduct(productId, "Wireless Headphones", PRODUCT_STOCK, PRODUCT_PRICE);
+
+                Order order = new Order(customer, Status.SHIPPED, 7500L, VALID_SHIPPING_ADDRESS);
+                EntityTestUtil.setId(order, orderId);
+                order.setIdempotencyKey(VALID_IDEMPOTENCY_KEY);
+                order.addOrderItem(new OrderItem(order, product, CART_ITEM_QUANTITY, PRODUCT_PRICE));
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(orderRepository.findByCustomerIdAndOrderId(customerId, orderId)).thenReturn(Optional.of(order));
+
+                // Act & Assert
+                OrderStateConflictException exception = assertThrows(
+                        OrderStateConflictException.class,
+                        () -> orderService.cancelOrder(orderId)
+                );
+                // Verify the status name is lowercased (not "SHIPPED" but "shipped")
+                assertTrue(exception.getMessage().contains("shipped"));
+                assertFalse(exception.getMessage().contains("SHIPPED"));
+            }
+
+            @Test
+            @DisplayName("Should not save or update anything when order is not in PENDING status")
+            void shouldNotSaveOrUpdate_whenOrderIsNotPending() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                UUID orderId = UUID.randomUUID();
+                UUID productId = UUID.randomUUID();
+
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+                Product product = buildActiveProduct(productId, "Wireless Headphones", PRODUCT_STOCK, PRODUCT_PRICE);
+
+                Order order = new Order(customer, Status.DELIVERED, 7500L, VALID_SHIPPING_ADDRESS);
+                EntityTestUtil.setId(order, orderId);
+                order.setIdempotencyKey(VALID_IDEMPOTENCY_KEY);
+                order.addOrderItem(new OrderItem(order, product, CART_ITEM_QUANTITY, PRODUCT_PRICE));
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(orderRepository.findByCustomerIdAndOrderId(customerId, orderId)).thenReturn(Optional.of(order));
+
+                // Act
+                assertThrows(OrderStateConflictException.class,
+                        () -> orderService.cancelOrder(orderId));
+
+                // Assert — no save operations should occur
+                verify(orderRepository, never()).saveAndFlush(any(Order.class));
+                verifyNoInteractions(inventoryOutboxRepository);
+            }
+        }
+
+        // ==================== cancelOrder() — CONFLICT / RACE CONDITION (DataIntegrityViolation) ====================
+
+        @Nested
+        @DisplayName("cancelOrder() — Conflict / race condition handling")
+        class CancelOrderConflict {
+
+            @Test
+            @DisplayName("Should throw OrderStateConflictException when DataIntegrityViolationException occurs on outbox save")
+            void shouldThrowOrderStateConflictException_whenDuplicateOutboxEntry() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                UUID orderId = UUID.randomUUID();
+                UUID productId = UUID.randomUUID();
+
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+                Product product = buildActiveProduct(productId, "Wireless Headphones", PRODUCT_STOCK, PRODUCT_PRICE);
+
+                Order order = new Order(customer, Status.PENDING, 7500L, VALID_SHIPPING_ADDRESS);
+                EntityTestUtil.setId(order, orderId);
+                order.setIdempotencyKey(VALID_IDEMPOTENCY_KEY);
+                order.addOrderItem(new OrderItem(order, product, CART_ITEM_QUANTITY, PRODUCT_PRICE));
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(orderRepository.findByCustomerIdAndOrderId(customerId, orderId)).thenReturn(Optional.of(order));
+
+                when(inventoryOutboxRepository.save(any(InventoryOutbox.class)))
+                        .thenThrow(new DataIntegrityViolationException("Duplicate outbox entry for order"));
+
+                // Act & Assert
+                OrderStateConflictException exception = assertThrows(
+                        OrderStateConflictException.class,
+                        () -> orderService.cancelOrder(orderId)
+                );
+                assertEquals("Order already has been canceled. Please refresh", exception.getMessage());
+            }
+        }
+
+        // ==================== cancelOrder() — SECURITY CONTEXT FAILURES ====================
+
+        @Nested
+        @DisplayName("cancelOrder() — Security context failures")
+        class CancelOrderSecurityContextFailures {
+
+            @Test
+            @DisplayName("Should throw NullPointerException when authentication is null")
+            void shouldThrowNullPointerException_whenAuthenticationIsNull() {
+                // Arrange — SecurityContext exists but getAuthentication() returns null
+                SecurityContext securityContext = mock(SecurityContext.class);
+                when(securityContext.getAuthentication()).thenReturn(null);
+                SecurityContextHolder.setContext(securityContext);
+
+                // Act & Assert — calling getName() on null Authentication throws NPE
+                assertThrows(NullPointerException.class,
+                        () -> orderService.cancelOrder(UUID.randomUUID()));
+
+                // Verify no business operations occurred
+                verifyNoInteractions(customerRepository);
+                verifyNoInteractions(orderRepository);
+                verifyNoInteractions(inventoryOutboxRepository);
+            }
+        }
+
+        // ==================== cancelOrder() — SERVER FAILURE CASES ====================
+
+        @Nested
+        @DisplayName("cancelOrder() — Server failure simulation")
+        class CancelOrderServerFailures {
+
+            @Test
+            @DisplayName("Should propagate RuntimeException when findByEmailWithCart throws")
+            void shouldPropagateException_whenFindByEmailWithCartThrowsRuntimeException() {
+                // Arrange
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL))
+                        .thenThrow(new RuntimeException("Database unavailable"));
+
+                // Act & Assert
+                RuntimeException exception = assertThrows(
+                        RuntimeException.class,
+                        () -> orderService.cancelOrder(UUID.randomUUID())
+                );
+                assertEquals("Database unavailable", exception.getMessage());
+            }
+
+            @Test
+            @DisplayName("Should propagate RuntimeException when findByCustomerIdAndOrderId throws")
+            void shouldPropagateException_whenFindByCustomerIdAndOrderIdThrowsRuntimeException() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                UUID orderId = UUID.randomUUID();
+
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(orderRepository.findByCustomerIdAndOrderId(customerId, orderId))
+                        .thenThrow(new RuntimeException("Database timeout"));
+
+                // Act & Assert
+                RuntimeException exception = assertThrows(
+                        RuntimeException.class,
+                        () -> orderService.cancelOrder(orderId)
+                );
+                assertEquals("Database timeout", exception.getMessage());
+            }
+
+            @Test
+            @DisplayName("Should propagate RuntimeException when inventoryOutboxRepository.save throws a non-DIV exception")
+            void shouldPropagateException_whenInventoryOutboxSaveThrowsRuntimeException() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                UUID orderId = UUID.randomUUID();
+                UUID productId = UUID.randomUUID();
+
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+                Product product = buildActiveProduct(productId, "Wireless Headphones", PRODUCT_STOCK, PRODUCT_PRICE);
+
+                Order order = new Order(customer, Status.PENDING, 7500L, VALID_SHIPPING_ADDRESS);
+                EntityTestUtil.setId(order, orderId);
+                order.setIdempotencyKey(VALID_IDEMPOTENCY_KEY);
+                order.addOrderItem(new OrderItem(order, product, CART_ITEM_QUANTITY, PRODUCT_PRICE));
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(orderRepository.findByCustomerIdAndOrderId(customerId, orderId)).thenReturn(Optional.of(order));
+
+                when(inventoryOutboxRepository.save(any(InventoryOutbox.class)))
+                        .thenThrow(new RuntimeException("Outbox table unavailable"));
+
+                // Act & Assert
+                RuntimeException exception = assertThrows(
+                        RuntimeException.class,
+                        () -> orderService.cancelOrder(orderId)
+                );
+                assertEquals("Outbox table unavailable", exception.getMessage());
+            }
+
+            @Test
+            @DisplayName("Should propagate IllegalStateException when findByEmailWithCart throws")
+            void shouldPropagateException_whenFindByEmailWithCartThrowsIllegalStateException() {
+                // Arrange
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL))
+                        .thenThrow(new IllegalStateException("Connection pool exhausted"));
+
+                // Act & Assert
+                IllegalStateException exception = assertThrows(
+                        IllegalStateException.class,
+                        () -> orderService.cancelOrder(UUID.randomUUID())
+                );
+                assertEquals("Connection pool exhausted", exception.getMessage());
+            }
+
+            @Test
+            @DisplayName("Should propagate IllegalStateException when findByCustomerIdAndOrderId throws")
+            void shouldPropagateException_whenFindByCustomerIdAndOrderIdThrowsIllegalStateException() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                UUID orderId = UUID.randomUUID();
+
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(orderRepository.findByCustomerIdAndOrderId(customerId, orderId))
+                        .thenThrow(new IllegalStateException("Database connection lost"));
+
+                // Act & Assert
+                IllegalStateException exception = assertThrows(
+                        IllegalStateException.class,
+                        () -> orderService.cancelOrder(orderId)
+                );
+                assertEquals("Database connection lost", exception.getMessage());
+            }
+        }
+
+        // ==================== cancelOrder() — REPOSITORY INTERACTION VERIFICATION ====================
+
+        @Nested
+        @DisplayName("cancelOrder() — Repository interaction verification")
+        class CancelOrderRepositoryInteraction {
+
+            @Test
+            @DisplayName("Should call findByEmailWithCart exactly once")
+            void shouldCallFindByEmailWithCartExactlyOnce() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                UUID orderId = UUID.randomUUID();
+                UUID productId = UUID.randomUUID();
+
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+                Product product = buildActiveProduct(productId, "Wireless Headphones", PRODUCT_STOCK, PRODUCT_PRICE);
+
+                Order order = new Order(customer, Status.PENDING, 7500L, VALID_SHIPPING_ADDRESS);
+                EntityTestUtil.setId(order, orderId);
+                order.setIdempotencyKey(VALID_IDEMPOTENCY_KEY);
+                order.addOrderItem(new OrderItem(order, product, CART_ITEM_QUANTITY, PRODUCT_PRICE));
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(orderRepository.findByCustomerIdAndOrderId(customerId, orderId)).thenReturn(Optional.of(order));
+                when(orderRepository.saveAndFlush(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+
+                // Act
+                orderService.cancelOrder(orderId);
+
+                // Assert
+                verify(customerRepository).findByEmailWithCart(VALID_EMAIL);
+                verifyNoMoreInteractions(customerRepository);
+            }
+
+            @Test
+            @DisplayName("Should call findByCustomerIdAndOrderId with the correct customer ID and order ID")
+            void shouldCallFindByCustomerIdAndOrderId_withCorrectIds() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                UUID orderId = UUID.randomUUID();
+                UUID productId = UUID.randomUUID();
+
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+                Product product = buildActiveProduct(productId, "Wireless Headphones", PRODUCT_STOCK, PRODUCT_PRICE);
+
+                Order order = new Order(customer, Status.PENDING, 7500L, VALID_SHIPPING_ADDRESS);
+                EntityTestUtil.setId(order, orderId);
+                order.setIdempotencyKey(VALID_IDEMPOTENCY_KEY);
+                order.addOrderItem(new OrderItem(order, product, CART_ITEM_QUANTITY, PRODUCT_PRICE));
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(orderRepository.findByCustomerIdAndOrderId(customerId, orderId)).thenReturn(Optional.of(order));
+                when(orderRepository.saveAndFlush(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+
+                // Act
+                orderService.cancelOrder(orderId);
+
+                // Assert
+                verify(orderRepository).findByCustomerIdAndOrderId(customerId, orderId);
+            }
+
+            @Test
+            @DisplayName("Should not interact with cartItemRepository")
+            void shouldNotInteractWithCartItemRepository() {
+                // Arrange
+                UUID customerId = UUID.randomUUID();
+                UUID orderId = UUID.randomUUID();
+                UUID productId = UUID.randomUUID();
+
+                Customer customer = buildCustomerWithCart(customerId, UUID.randomUUID());
+                Product product = buildActiveProduct(productId, "Wireless Headphones", PRODUCT_STOCK, PRODUCT_PRICE);
+
+                Order order = new Order(customer, Status.PENDING, 7500L, VALID_SHIPPING_ADDRESS);
+                EntityTestUtil.setId(order, orderId);
+                order.setIdempotencyKey(VALID_IDEMPOTENCY_KEY);
+                order.addOrderItem(new OrderItem(order, product, CART_ITEM_QUANTITY, PRODUCT_PRICE));
+
+                stubAuthenticatedUser(VALID_EMAIL);
+                when(customerRepository.findByEmailWithCart(VALID_EMAIL)).thenReturn(Optional.of(customer));
+                when(orderRepository.findByCustomerIdAndOrderId(customerId, orderId)).thenReturn(Optional.of(order));
+                when(orderRepository.saveAndFlush(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+
+                // Act
+                orderService.cancelOrder(orderId);
+
+                // Assert — cancelOrder should never touch the cart
+                verifyNoInteractions(cartItemRepository);
             }
         }
     }
