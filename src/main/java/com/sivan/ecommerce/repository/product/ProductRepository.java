@@ -5,6 +5,7 @@ import com.sivan.ecommerce.entity.product.Product;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -56,4 +57,12 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
                                            @Param("maxPrice") Long maxPrice,
                                            @Param("category") String category,
                                            Pageable pageable);
+
+    @Modifying
+    @Query("""
+            UPDATE Product p
+            SET p.quantity = p.quantity + :stock
+            WHERE p.id = :productId
+            """)
+    void restoreStock(@Param("productId") UUID productId, @Param("stock") int stock);
 }
