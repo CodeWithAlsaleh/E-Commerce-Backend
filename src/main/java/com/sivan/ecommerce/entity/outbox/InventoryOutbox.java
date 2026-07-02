@@ -16,7 +16,7 @@ public class InventoryOutbox extends BaseEntity {
 
     @Column(name = "status", nullable = false)
     @Enumerated(EnumType.STRING)
-    private Status status;
+    private Status status = Status.PENDING;
 
     public InventoryOutbox() {
     }
