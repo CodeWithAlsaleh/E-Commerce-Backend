@@ -11,6 +11,6 @@ public record ProductFilterDTO(@Nullable @Size(min = 3, max = 255) String search
 
     public ProductFilterDTO {
         search = search != null ? search.trim() : null;
-        category = category != null ? category.trim() : null;
+        category = category != null ? category.trim().toLowerCase() : null;
     }
 }

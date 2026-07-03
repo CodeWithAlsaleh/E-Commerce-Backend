@@ -8,7 +8,7 @@ public record CategoryRequestDTO(@NotBlank @Size(min = 3, max = 255) String titl
                                  @Nullable @Size(min = 40, max = 5000) String description) {
 
     public CategoryRequestDTO {
-        title = title != null ? title.trim() : null;
+        title = title != null ? title.trim().toLowerCase() : null;
         description = description != null ? description.trim() : null;
     }
 }
