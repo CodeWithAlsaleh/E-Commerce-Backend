@@ -30,6 +30,7 @@ import static org.hamcrest.Matchers.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -168,6 +169,18 @@ class ProductRestControllerTest {
             @DisplayName("Should return 401 when no credentials are provided (anonymous)")
             void shouldReturn401_whenNoCredentials() throws Exception {
                 mockMvc.perform(post(PRODUCTS_URL)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(validRequest())))
+                        .andExpect(status().isUnauthorized());
+
+                verifyNoInteractions(productService);
+            }
+
+            @Test
+            @DisplayName("Should return 401 when invalid credentials are provided")
+            void shouldReturn401_whenInvalidCredentials() throws Exception {
+                mockMvc.perform(post(PRODUCTS_URL)
+                                .with(httpBasic("wrong@email.com", "WrongPassword1!"))
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(validRequest())))
                         .andExpect(status().isUnauthorized());
