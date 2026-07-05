@@ -17,12 +17,15 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 
-import static org.hamcrest.Matchers.nullValue;
+import static org.hamcrest.Matchers.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -534,6 +537,260 @@ class CategoryRestControllerTest {
                                 .content(objectMapper.writeValueAsString(request)))
                         .andExpect(status().isCreated())
                         .andExpect(jsonPath("$.description").value(maxDescription));
+            }
+        }
+    }
+
+    // ==================== getCategories() ====================
+    @Nested
+    @DisplayName("getCategories()")
+    class GetCategories {
+
+        // ======================== Helpers ========================
+
+        private CategoryResponseDTO categoryResponse(UUID id, String title, String description, boolean isActive) {
+            return new CategoryResponseDTO(id, title, description, isActive);
+        }
+
+        // ==================== SUCCESS CASES (200) ====================
+
+        @Nested
+        @DisplayName("Success cases — 200 OK")
+        class SuccessCases {
+
+            @Test
+            @DisplayName("Should return 200 and a list of categories when categories exist")
+            void shouldReturn200_whenCategoriesExist() throws Exception {
+                UUID id1 = UUID.randomUUID();
+                UUID id2 = UUID.randomUUID();
+                List<CategoryResponseDTO> categories = List.of(
+                        categoryResponse(id1, "electronics", VALID_DESCRIPTION, true),
+                        categoryResponse(id2, "furniture", "High quality furniture for home and office use.".repeat(2), true)
+                );
+                when(categoryService.getCategories()).thenReturn(categories);
+
+                mockMvc.perform(get(CATEGORIES_URL))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$", hasSize(2)))
+                        .andExpect(jsonPath("$[0].id").value(id1.toString()))
+                        .andExpect(jsonPath("$[0].title").value("electronics"))
+                        .andExpect(jsonPath("$[0].description").value(VALID_DESCRIPTION))
+                        .andExpect(jsonPath("$[0].isActive").value(true))
+                        .andExpect(jsonPath("$[1].id").value(id2.toString()))
+                        .andExpect(jsonPath("$[1].title").value("furniture"))
+                        .andExpect(jsonPath("$[1].description").value("High quality furniture for home and office use.High quality furniture for home and office use."))
+                        .andExpect(jsonPath("$[1].isActive").value(true));
+
+                verify(categoryService).getCategories();
+            }
+
+            @Test
+            @DisplayName("Should return 200 and an empty list when no categories exist")
+            void shouldReturn200_whenNoCategoriesExist() throws Exception {
+                when(categoryService.getCategories()).thenReturn(Collections.emptyList());
+
+                mockMvc.perform(get(CATEGORIES_URL))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$", hasSize(0)));
+
+                verify(categoryService).getCategories();
+            }
+
+            @Test
+            @DisplayName("Should return 200 without authentication (permitAll endpoint)")
+            void shouldReturn200_withoutAuthentication() throws Exception {
+                when(categoryService.getCategories()).thenReturn(Collections.emptyList());
+
+                mockMvc.perform(get(CATEGORIES_URL))
+                        .andExpect(status().isOk());
+            }
+
+            @Test
+            @DisplayName("Should return 200 when called by authenticated ADMIN user")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn200_whenCalledByAdmin() throws Exception {
+                when(categoryService.getCategories()).thenReturn(List.of(
+                        categoryResponse(UUID.randomUUID(), "electronics", VALID_DESCRIPTION, true)
+                ));
+
+                mockMvc.perform(get(CATEGORIES_URL))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$", hasSize(1)));
+            }
+
+            @Test
+            @DisplayName("Should return 200 when called by authenticated USER role")
+            @WithMockUser(roles = "USER")
+            void shouldReturn200_whenCalledByUser() throws Exception {
+                when(categoryService.getCategories()).thenReturn(List.of(
+                        categoryResponse(UUID.randomUUID(), "electronics", VALID_DESCRIPTION, true)
+                ));
+
+                mockMvc.perform(get(CATEGORIES_URL))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$", hasSize(1)));
+            }
+
+            @Test
+            @DisplayName("Should call categoryService.getCategories exactly once")
+            void shouldCallServiceExactlyOnce() throws Exception {
+                when(categoryService.getCategories()).thenReturn(Collections.emptyList());
+
+                mockMvc.perform(get(CATEGORIES_URL))
+                        .andExpect(status().isOk());
+
+                verify(categoryService).getCategories();
+                verifyNoMoreInteractions(categoryService);
+            }
+        }
+
+        // ==================== SERVICE EXCEPTION HANDLING ====================
+
+        @Nested
+        @DisplayName("Service exception handling")
+        class ServiceExceptionHandling {
+
+            @Test
+            @DisplayName("Should return 500 when service throws an unexpected RuntimeException")
+            void shouldReturn500_whenServiceThrowsRuntimeException() throws Exception {
+                when(categoryService.getCategories())
+                        .thenThrow(new RuntimeException("Database connection lost"));
+
+                mockMvc.perform(get(CATEGORIES_URL))
+                        .andExpect(status().isInternalServerError())
+                        .andExpect(jsonPath("$.status").value(500))
+                        .andExpect(jsonPath("$.message").value("An unexpected error occurred."));
+            }
+
+            @Test
+            @DisplayName("Should return 500 when service throws an unexpected IllegalStateException")
+            void shouldReturn500_whenServiceThrowsIllegalStateException() throws Exception {
+                when(categoryService.getCategories())
+                        .thenThrow(new IllegalStateException("Unexpected state"));
+
+                mockMvc.perform(get(CATEGORIES_URL))
+                        .andExpect(status().isInternalServerError())
+                        .andExpect(jsonPath("$.status").value(500))
+                        .andExpect(jsonPath("$.message").value("An unexpected error occurred."));
+            }
+        }
+
+        // ==================== JSON RESPONSE STRUCTURE ====================
+
+        @Nested
+        @DisplayName("JSON response structure validation")
+        class JsonResponseStructure {
+
+            @Test
+            @DisplayName("Should return all expected fields for each category in the list")
+            void shouldReturnAllFieldsForEachCategory() throws Exception {
+                UUID id = UUID.randomUUID();
+                when(categoryService.getCategories()).thenReturn(List.of(
+                        categoryResponse(id, VALID_TITLE, VALID_DESCRIPTION, true)
+                ));
+
+                mockMvc.perform(get(CATEGORIES_URL))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$[0].id").exists())
+                        .andExpect(jsonPath("$[0].title").exists())
+                        .andExpect(jsonPath("$[0].description").exists())
+                        .andExpect(jsonPath("$[0].isActive").exists());
+            }
+
+            @Test
+            @DisplayName("Should return a JSON array at the root level")
+            void shouldReturnJsonArray() throws Exception {
+                when(categoryService.getCategories()).thenReturn(List.of(
+                        categoryResponse(UUID.randomUUID(), VALID_TITLE, VALID_DESCRIPTION, true)
+                ));
+
+                mockMvc.perform(get(CATEGORIES_URL))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$").isArray());
+            }
+
+            @Test
+            @DisplayName("Error response should contain status, message, and timeStamp fields")
+            void shouldReturnErrorResponseStructure() throws Exception {
+                when(categoryService.getCategories())
+                        .thenThrow(new RuntimeException("Unexpected"));
+
+                mockMvc.perform(get(CATEGORIES_URL))
+                        .andExpect(status().isInternalServerError())
+                        .andExpect(jsonPath("$.status").value(500))
+                        .andExpect(jsonPath("$.message").isNotEmpty())
+                        .andExpect(jsonPath("$.timeStamp").isNumber());
+            }
+        }
+
+        // ==================== EDGE CASES ====================
+
+        @Nested
+        @DisplayName("Edge cases")
+        class EdgeCases {
+
+            @Test
+            @DisplayName("Should return 200 when a single category exists")
+            void shouldReturn200_whenSingleCategoryExists() throws Exception {
+                UUID id = UUID.randomUUID();
+                when(categoryService.getCategories()).thenReturn(List.of(
+                        categoryResponse(id, VALID_TITLE, VALID_DESCRIPTION, true)
+                ));
+
+                mockMvc.perform(get(CATEGORIES_URL))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$", hasSize(1)))
+                        .andExpect(jsonPath("$[0].id").value(id.toString()));
+            }
+
+            @Test
+            @DisplayName("Should return category with null description in the list")
+            void shouldReturnCategoryWithNullDescription() throws Exception {
+                UUID id = UUID.randomUUID();
+                when(categoryService.getCategories()).thenReturn(List.of(
+                        categoryResponse(id, VALID_TITLE, null, true)
+                ));
+
+                mockMvc.perform(get(CATEGORIES_URL))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$[0].description").value(nullValue()));
+            }
+
+            @Test
+            @DisplayName("Should return categories with mixed isActive values")
+            void shouldReturnCategoriesWithMixedActiveStatus() throws Exception {
+                UUID activeId = UUID.randomUUID();
+                UUID inactiveId = UUID.randomUUID();
+                when(categoryService.getCategories()).thenReturn(List.of(
+                        categoryResponse(activeId, "active category", VALID_DESCRIPTION, true),
+                        categoryResponse(inactiveId, "inactive category", VALID_DESCRIPTION, false)
+                ));
+
+                mockMvc.perform(get(CATEGORIES_URL))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$", hasSize(2)))
+                        .andExpect(jsonPath("$[0].isActive").value(true))
+                        .andExpect(jsonPath("$[1].isActive").value(false));
+            }
+
+            @Test
+            @DisplayName("Should return categories preserving service ordering")
+            void shouldReturnCategoriesInServiceOrder() throws Exception {
+                UUID id1 = UUID.randomUUID();
+                UUID id2 = UUID.randomUUID();
+                UUID id3 = UUID.randomUUID();
+                when(categoryService.getCategories()).thenReturn(List.of(
+                        categoryResponse(id1, "accessories", VALID_DESCRIPTION, true),
+                        categoryResponse(id2, "electronics", VALID_DESCRIPTION, true),
+                        categoryResponse(id3, "furniture", VALID_DESCRIPTION, true)
+                ));
+
+                mockMvc.perform(get(CATEGORIES_URL))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$", hasSize(3)))
+                        .andExpect(jsonPath("$[0].title").value("accessories"))
+                        .andExpect(jsonPath("$[1].title").value("electronics"))
+                        .andExpect(jsonPath("$[2].title").value("furniture"));
             }
         }
     }
