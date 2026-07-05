@@ -14,7 +14,12 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.IntStream;
+
+import org.springframework.data.domain.Sort;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -292,6 +297,302 @@ class CategoryServiceImplTest {
 
                 // Assert
                 verify(categoryRepository).save(any(Category.class));
+            }
+        }
+    }
+
+    // ======================== getCategories() ========================
+
+    @Nested
+    @DisplayName("getCategories()")
+    class GetCategories {
+
+        // ======================== Helper Methods ========================
+
+        /**
+         * Creates a {@link Category} with the given fields and a reflectively-set ID.
+         */
+        private Category getCategory(UUID id, String title, String description, boolean isActive) {
+            Category category = new Category(title, description);
+            category.setActive(isActive);
+            EntityTestUtil.setId(category, id);
+            return category;
+        }
+
+        // ==================== SUCCESS CASES ====================
+
+        @Nested
+        @DisplayName("Success cases")
+        class SuccessCases {
+
+            @Test
+            @DisplayName("Should return a list of CategoryResponseDTOs when categories exist")
+            void shouldReturnListOfCategoryResponseDTOs_whenCategoriesExist() {
+                // Arrange
+                UUID id1 = UUID.randomUUID();
+                UUID id2 = UUID.randomUUID();
+                UUID id3 = UUID.randomUUID();
+
+                List<Category> categories = List.of(
+                        getCategory(id1, "accessories", "Phone cases and chargers", true),
+                        getCategory(id2, "electronics", "All electronic items", true),
+                        getCategory(id3, "furniture", "Home and office furniture", true)
+                );
+
+                when(categoryRepository.findAll(Sort.by(Sort.Direction.ASC, "title")))
+                        .thenReturn(categories);
+
+                // Act
+                List<CategoryResponseDTO> result = categoryService.getCategories();
+
+                // Assert
+                assertNotNull(result);
+                assertEquals(3, result.size());
+
+                assertEquals(id1, result.getFirst().id());
+                assertEquals("accessories", result.getFirst().title());
+                assertEquals("Phone cases and chargers", result.getFirst().description());
+                assertTrue(result.getFirst().isActive());
+
+                assertEquals(id2, result.get(1).id());
+                assertEquals("electronics", result.get(1).title());
+                assertEquals("All electronic items", result.get(1).description());
+                assertTrue(result.get(1).isActive());
+
+                assertEquals(id3, result.get(2).id());
+                assertEquals("furniture", result.get(2).title());
+                assertEquals("Home and office furniture", result.get(2).description());
+                assertTrue(result.get(2).isActive());
+            }
+
+            @Test
+            @DisplayName("Should return an empty list when no categories exist")
+            void shouldReturnEmptyList_whenNoCategoriesExist() {
+                // Arrange
+                when(categoryRepository.findAll(Sort.by(Sort.Direction.ASC, "title")))
+                        .thenReturn(Collections.emptyList());
+
+                // Act
+                List<CategoryResponseDTO> result = categoryService.getCategories();
+
+                // Assert
+                assertNotNull(result);
+                assertTrue(result.isEmpty());
+            }
+
+            @Test
+            @DisplayName("Should return a single-element list when only one category exists")
+            void shouldReturnSingleElementList_whenOneCategoryExists() {
+                // Arrange
+                UUID id = UUID.randomUUID();
+                Category category = getCategory(id, "electronics", "Gadgets and devices", true);
+
+                when(categoryRepository.findAll(Sort.by(Sort.Direction.ASC, "title")))
+                        .thenReturn(List.of(category));
+
+                // Act
+                List<CategoryResponseDTO> result = categoryService.getCategories();
+
+                // Assert
+                assertNotNull(result);
+                assertEquals(1, result.size());
+                assertEquals(id, result.getFirst().id());
+                assertEquals("electronics", result.getFirst().title());
+                assertEquals("Gadgets and devices", result.getFirst().description());
+                assertTrue(result.getFirst().isActive());
+            }
+
+            @Test
+            @DisplayName("Should call repository.findAll with ascending sort by title")
+            void shouldCallFindAllWithAscendingSortByTitle() {
+                // Arrange
+                when(categoryRepository.findAll(Sort.by(Sort.Direction.ASC, "title")))
+                        .thenReturn(Collections.emptyList());
+
+                // Act
+                categoryService.getCategories();
+
+                // Assert
+                verify(categoryRepository).findAll(Sort.by(Sort.Direction.ASC, "title"));
+                verifyNoMoreInteractions(categoryRepository);
+            }
+        }
+
+        // ==================== MAPPER INTERACTION VERIFICATION ====================
+
+        @Nested
+        @DisplayName("Mapper integration verification")
+        class MapperVerification {
+
+            @Test
+            @DisplayName("Should correctly map each Category entity field to CategoryResponseDTO")
+            void shouldMapEachEntityFieldToResponseDTO() {
+                // Arrange
+                UUID id = UUID.randomUUID();
+                Category category = getCategory(id, "electronics", "Gadgets and devices", true);
+
+                when(categoryRepository.findAll(Sort.by(Sort.Direction.ASC, "title")))
+                        .thenReturn(List.of(category));
+
+                // Act
+                List<CategoryResponseDTO> result = categoryService.getCategories();
+
+                // Assert — verify every field was mapped correctly
+                CategoryResponseDTO dto = result.getFirst();
+                assertEquals(id, dto.id());
+                assertEquals(category.getTitle(), dto.title());
+                assertEquals(category.getDescription(), dto.description());
+                assertEquals(category.isActive(), dto.isActive());
+            }
+
+            @Test
+            @DisplayName("Should preserve the order returned by repository in the response list")
+            void shouldPreserveRepositoryOrder() {
+                // Arrange
+                UUID id1 = UUID.randomUUID();
+                UUID id2 = UUID.randomUUID();
+
+                List<Category> categories = List.of(
+                        getCategory(id1, "accessories", "Accessories desc", true),
+                        getCategory(id2, "electronics", "Electronics desc", true)
+                );
+
+                when(categoryRepository.findAll(Sort.by(Sort.Direction.ASC, "title")))
+                        .thenReturn(categories);
+
+                // Act
+                List<CategoryResponseDTO> result = categoryService.getCategories();
+
+                // Assert — order must match repository output
+                assertEquals(id1, result.getFirst().id());
+                assertEquals(id2, result.get(1).id());
+            }
+        }
+
+        // ==================== REPOSITORY / SERVER FAILURE CASES ====================
+
+        @Nested
+        @DisplayName("Repository failure simulation")
+        class RepositoryFailures {
+
+            @Test
+            @DisplayName("Should propagate RuntimeException when repository throws on findAll")
+            void shouldPropagateRuntimeException_whenRepositoryThrows() {
+                // Arrange
+                when(categoryRepository.findAll(Sort.by(Sort.Direction.ASC, "title")))
+                        .thenThrow(new RuntimeException("Database connection lost"));
+
+                // Act & Assert
+                RuntimeException exception = assertThrows(
+                        RuntimeException.class,
+                        () -> categoryService.getCategories()
+                );
+                assertEquals("Database connection lost", exception.getMessage());
+            }
+
+            @Test
+            @DisplayName("Should propagate IllegalStateException from repository")
+            void shouldPropagateIllegalStateException_whenRepositoryFails() {
+                // Arrange
+                when(categoryRepository.findAll(Sort.by(Sort.Direction.ASC, "title")))
+                        .thenThrow(new IllegalStateException("Unexpected persistence error"));
+
+                // Act & Assert
+                IllegalStateException exception = assertThrows(
+                        IllegalStateException.class,
+                        () -> categoryService.getCategories()
+                );
+                assertEquals("Unexpected persistence error", exception.getMessage());
+            }
+        }
+
+        // ==================== EDGE CASES ====================
+
+        @Nested
+        @DisplayName("Edge cases")
+        class EdgeCases {
+
+            @Test
+            @DisplayName("Should handle categories with null descriptions")
+            void shouldHandleCategoriesWithNullDescriptions() {
+                // Arrange
+                UUID id = UUID.randomUUID();
+                Category category = getCategory(id, "electronics", null, true);
+
+                when(categoryRepository.findAll(Sort.by(Sort.Direction.ASC, "title")))
+                        .thenReturn(List.of(category));
+
+                // Act
+                List<CategoryResponseDTO> result = categoryService.getCategories();
+
+                // Assert
+                assertNotNull(result);
+                assertEquals(1, result.size());
+                assertNull(result.getFirst().description());
+            }
+
+            @Test
+            @DisplayName("Should handle categories with special characters and Unicode in title and description")
+            void shouldHandleSpecialCharactersAndUnicode() {
+                // Arrange
+                UUID id = UUID.randomUUID();
+                String specialTitle = "laptops & pcs™";
+                String specialDescription = "Features: résumé-ready, naïve AI, 日本語サポート & more! @#$%^&*()";
+                Category category = getCategory(id, specialTitle, specialDescription, true);
+
+                when(categoryRepository.findAll(Sort.by(Sort.Direction.ASC, "title")))
+                        .thenReturn(List.of(category));
+
+                // Act
+                List<CategoryResponseDTO> result = categoryService.getCategories();
+
+                // Assert
+                assertNotNull(result);
+                assertEquals(specialTitle, result.getFirst().title());
+                assertEquals(specialDescription, result.getFirst().description());
+            }
+
+            @Test
+            @DisplayName("Should include inactive categories in the result (no filtering by isActive)")
+            void shouldIncludeInactiveCategories() {
+                // Arrange
+                UUID activeId = UUID.randomUUID();
+                UUID inactiveId = UUID.randomUUID();
+
+                List<Category> categories = List.of(
+                        getCategory(activeId, "active category", "Active desc", true),
+                        getCategory(inactiveId, "inactive category", "Inactive desc", false)
+                );
+
+                when(categoryRepository.findAll(Sort.by(Sort.Direction.ASC, "title")))
+                        .thenReturn(categories);
+
+                // Act
+                List<CategoryResponseDTO> result = categoryService.getCategories();
+
+                // Assert
+                assertEquals(2, result.size());
+                assertTrue(result.getFirst().isActive());
+                assertFalse(result.get(1).isActive());
+            }
+
+            @Test
+            @DisplayName("Should handle a large number of categories")
+            void shouldHandleLargeNumberOfCategories() {
+                // Arrange
+                List<Category> categories = IntStream.rangeClosed(1, 100)
+                        .mapToObj(i -> getCategory(UUID.randomUUID(), "category-" + i, "Description " + i, true))
+                        .toList();
+
+                when(categoryRepository.findAll(Sort.by(Sort.Direction.ASC, "title")))
+                        .thenReturn(categories);
+
+                // Act
+                List<CategoryResponseDTO> result = categoryService.getCategories();
+
+                // Assert
+                assertNotNull(result);
+                assertEquals(100, result.size());
             }
         }
     }
