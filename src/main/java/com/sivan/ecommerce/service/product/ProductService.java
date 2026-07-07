@@ -15,4 +15,6 @@ public interface ProductService {
     ProductResponseDTO getProduct(UUID productId);
 
     Page<ProductResponseDTO> getProducts(ProductFilterDTO productFilterDTO, Pageable pageable);
+
+    void linkCategoryToProduct(UUID productId, UUID categoryId);
 }

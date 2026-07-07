@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Optional;
 import java.util.UUID;
 
 public interface ProductRepository extends JpaRepository<Product, UUID> {
@@ -65,4 +66,16 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
             WHERE p.id = :productId
             """)
     void restoreStock(@Param("productId") UUID productId, @Param("stock") int stock);
+
+    /*
+     *   You must explicitly use a LEFT JOIN. This ensures that the product
+     *   is returned even if its categories collection is currently empty.
+     * */
+    @Query("""
+            SELECT p
+            FROM Product p
+            LEFT JOIN FETCH p.categories
+            WHERE p.id = :productId
+            """)
+    Optional<Product> findByIdWithCategories(@Param("productId") UUID productId);
 }

@@ -3,10 +3,13 @@ package com.sivan.ecommerce.service.product;
 import com.sivan.ecommerce.dto.product.ProductFilterDTO;
 import com.sivan.ecommerce.dto.product.ProductRequestDTO;
 import com.sivan.ecommerce.dto.product.ProductResponseDTO;
+import com.sivan.ecommerce.entity.category.Category;
 import com.sivan.ecommerce.entity.product.Product;
+import com.sivan.ecommerce.exception.CategoryNotFoundException;
 import com.sivan.ecommerce.exception.InvalidDataException;
 import com.sivan.ecommerce.exception.ProductNotFoundException;
 import com.sivan.ecommerce.mapper.product.ProductMapper;
+import com.sivan.ecommerce.repository.category.CategoryRepository;
 import com.sivan.ecommerce.repository.product.ProductRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -23,13 +26,17 @@ import java.util.UUID;
 public class ProductServiceImpl implements ProductService {
 
     private final ProductRepository productRepository;
+    private final CategoryRepository categoryRepository;
 
     // TODO: Think of adding "newest" (createdAt) sorting field in the future
     private static final Set<String> ALLOWED_SORTS = Set.of("title", "price");
 
     @Autowired
-    public ProductServiceImpl(ProductRepository productRepository) {
+    public ProductServiceImpl(ProductRepository productRepository,
+                              CategoryRepository categoryRepository) {
+
         this.productRepository = productRepository;
+        this.categoryRepository = categoryRepository;
     }
 
     @Override
@@ -69,5 +76,23 @@ public class ProductServiceImpl implements ProductService {
                 productFilterDTO.maxPrice(),
                 productFilterDTO.category(),
                 pageable);
+    }
+
+    @Override
+    @Transactional
+    public void linkCategoryToProduct(UUID productId, UUID categoryId) {
+        Product product = productRepository.findByIdWithCategories(productId)
+                .orElseThrow(() -> new ProductNotFoundException("Product not found"));
+
+        Category category = categoryRepository.findById(categoryId)
+                .orElseThrow(() -> new CategoryNotFoundException("Category not found"));
+
+        product.addCategory(category);
+
+        /*
+         *   Hibernate looks directly at product's managed state, sees the new
+         *   category added to it "dirty-checking", tiny set, and seamlessly
+         *   fires the SQL INSERT into 'product_category'.
+         * */
     }
 }
