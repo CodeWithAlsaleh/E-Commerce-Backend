@@ -5,6 +5,7 @@ import com.sivan.ecommerce.config.SecurityConfig;
 import com.sivan.ecommerce.dto.product.ProductFilterDTO;
 import com.sivan.ecommerce.dto.product.ProductRequestDTO;
 import com.sivan.ecommerce.dto.product.ProductResponseDTO;
+import com.sivan.ecommerce.exception.CategoryNotFoundException;
 import com.sivan.ecommerce.exception.InvalidDataException;
 import com.sivan.ecommerce.exception.ProductNotFoundException;
 import com.sivan.ecommerce.service.product.ProductService;
@@ -33,6 +34,7 @@ import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -1611,6 +1613,326 @@ class ProductRestControllerTest {
                         .andExpect(jsonPath("$.content[0].title").value("Product One"))
                         .andExpect(jsonPath("$.content[1].title").value("Product Two"))
                         .andExpect(jsonPath("$.totalElements").value(2));
+            }
+        }
+    }
+
+    // ==================== linkCategoryToProduct() ====================
+    @Nested
+    @DisplayName("linkCategoryToProduct()")
+    class LinkCategoryToProduct {
+
+        // ======================== Constants ========================
+
+        private static final String LINK_CATEGORY_URL = "/products/{productId}/categories/{categoryId}";
+
+        // ==================== SUCCESS CASES (204) ====================
+
+        @Nested
+        @DisplayName("Success cases — 204 No Content")
+        class SuccessCases {
+
+            @Test
+            @DisplayName("Should return 204 when admin links a valid category to a valid product")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn204_whenAdminLinksValidCategoryToProduct() throws Exception {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID categoryId = UUID.randomUUID();
+                doNothing().when(productService).linkCategoryToProduct(eq(productId), eq(categoryId));
+
+                // Act & Assert
+                mockMvc.perform(put(LINK_CATEGORY_URL, productId, categoryId))
+                        .andExpect(status().isNoContent());
+
+                verify(productService).linkCategoryToProduct(eq(productId), eq(categoryId));
+            }
+
+            @Test
+            @DisplayName("Should return empty body when link is successful")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturnEmptyBody_whenLinkIsSuccessful() throws Exception {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID categoryId = UUID.randomUUID();
+                doNothing().when(productService).linkCategoryToProduct(eq(productId), eq(categoryId));
+
+                // Act & Assert
+                mockMvc.perform(put(LINK_CATEGORY_URL, productId, categoryId))
+                        .andExpect(status().isNoContent())
+                        .andExpect(jsonPath("$").doesNotExist());
+            }
+
+            @Test
+            @DisplayName("Should call productService.linkCategoryToProduct exactly once")
+            @WithMockUser(roles = "ADMIN")
+            void shouldCallServiceExactlyOnce() throws Exception {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID categoryId = UUID.randomUUID();
+                doNothing().when(productService).linkCategoryToProduct(eq(productId), eq(categoryId));
+
+                // Act
+                mockMvc.perform(put(LINK_CATEGORY_URL, productId, categoryId))
+                        .andExpect(status().isNoContent());
+
+                // Assert
+                verify(productService).linkCategoryToProduct(eq(productId), eq(categoryId));
+                verifyNoMoreInteractions(productService);
+            }
+        }
+
+        // ==================== AUTHENTICATION FAILURES (401) ====================
+
+        @Nested
+        @DisplayName("Authentication failures — 401 Unauthorized")
+        class AuthenticationFailures {
+
+            @Test
+            @DisplayName("Should return 401 when no credentials are provided (anonymous)")
+            void shouldReturn401_whenNoCredentials() throws Exception {
+                UUID productId = UUID.randomUUID();
+                UUID categoryId = UUID.randomUUID();
+
+                mockMvc.perform(put(LINK_CATEGORY_URL, productId, categoryId))
+                        .andExpect(status().isUnauthorized());
+
+                verifyNoInteractions(productService);
+            }
+
+            @Test
+            @DisplayName("Should return 401 when invalid credentials are provided")
+            void shouldReturn401_whenInvalidCredentials() throws Exception {
+                UUID productId = UUID.randomUUID();
+                UUID categoryId = UUID.randomUUID();
+
+                mockMvc.perform(put(LINK_CATEGORY_URL, productId, categoryId)
+                                .with(httpBasic("wrong@email.com", "WrongPassword1!")))
+                        .andExpect(status().isUnauthorized());
+
+                verifyNoInteractions(productService);
+            }
+        }
+
+        // ==================== AUTHORIZATION FAILURES (403) ====================
+
+        @Nested
+        @DisplayName("Authorization failures — 403 Forbidden")
+        class AuthorizationFailures {
+
+            @Test
+            @DisplayName("Should return 403 when authenticated user has ROLE_USER (not ADMIN)")
+            @WithMockUser(roles = "USER")
+            void shouldReturn403_whenUserRoleIsNotAdmin() throws Exception {
+                UUID productId = UUID.randomUUID();
+                UUID categoryId = UUID.randomUUID();
+
+                mockMvc.perform(put(LINK_CATEGORY_URL, productId, categoryId))
+                        .andExpect(status().isForbidden());
+
+                verifyNoInteractions(productService);
+            }
+
+            @Test
+            @DisplayName("Should return 403 when user has no roles at all")
+            @WithMockUser(roles = {})
+            void shouldReturn403_whenUserHasNoRoles() throws Exception {
+                UUID productId = UUID.randomUUID();
+                UUID categoryId = UUID.randomUUID();
+
+                mockMvc.perform(put(LINK_CATEGORY_URL, productId, categoryId))
+                        .andExpect(status().isForbidden());
+
+                verifyNoInteractions(productService);
+            }
+        }
+
+        // ==================== NOT FOUND CASES (404) ====================
+
+        @Nested
+        @DisplayName("Not found cases — 404 Not Found")
+        class NotFoundCases {
+
+            @Test
+            @DisplayName("Should return 404 when product does not exist")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn404_whenProductNotFound() throws Exception {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID categoryId = UUID.randomUUID();
+                doThrow(new ProductNotFoundException("Product not found"))
+                        .when(productService).linkCategoryToProduct(eq(productId), eq(categoryId));
+
+                // Act & Assert
+                mockMvc.perform(put(LINK_CATEGORY_URL, productId, categoryId))
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.status").value(404))
+                        .andExpect(jsonPath("$.message").value("Product not found"));
+            }
+
+            @Test
+            @DisplayName("Should return 404 when category does not exist")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn404_whenCategoryNotFound() throws Exception {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID categoryId = UUID.randomUUID();
+                doThrow(new CategoryNotFoundException("Category not found"))
+                        .when(productService).linkCategoryToProduct(eq(productId), eq(categoryId));
+
+                // Act & Assert
+                mockMvc.perform(put(LINK_CATEGORY_URL, productId, categoryId))
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.status").value(404))
+                        .andExpect(jsonPath("$.message").value("Category not found"));
+            }
+        }
+
+        // ==================== INVALID PATH VARIABLE (400) ====================
+
+        @Nested
+        @DisplayName("Invalid path variable — 400 Bad Request")
+        class InvalidPathVariable {
+
+            @Test
+            @DisplayName("Should return 400 when productId is not a valid UUID")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn400_whenProductIdIsNotValidUuid() throws Exception {
+                String invalidProductId = "not-a-uuid";
+                UUID categoryId = UUID.randomUUID();
+
+                mockMvc.perform(put("/products/{productId}/categories/{categoryId}", invalidProductId, categoryId))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.status").value(400))
+                        .andExpect(jsonPath("$.message").value("Invalid URL parameter: '" + invalidProductId + "' is not a valid format"));
+
+                verifyNoInteractions(productService);
+            }
+
+            @Test
+            @DisplayName("Should return 400 when categoryId is not a valid UUID")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn400_whenCategoryIdIsNotValidUuid() throws Exception {
+                UUID productId = UUID.randomUUID();
+                String invalidCategoryId = "not-a-uuid";
+
+                mockMvc.perform(put("/products/{productId}/categories/{categoryId}", productId, invalidCategoryId))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.status").value(400))
+                        .andExpect(jsonPath("$.message").value("Invalid URL parameter: '" + invalidCategoryId + "' is not a valid format"));
+
+                verifyNoInteractions(productService);
+            }
+
+            @Test
+            @DisplayName("Should return 400 when both productId and categoryId are not valid UUIDs")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn400_whenBothIdsAreNotValidUuids() throws Exception {
+                String invalidProductId = "abc-123";
+                String invalidCategoryId = "xyz-456";
+
+                mockMvc.perform(put("/products/{productId}/categories/{categoryId}", invalidProductId, invalidCategoryId))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.status").value(400));
+
+                verifyNoInteractions(productService);
+            }
+
+            @Test
+            @DisplayName("Should return 400 when productId is a plain number instead of UUID")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn400_whenProductIdIsNumeric() throws Exception {
+                String numericId = "12345";
+                UUID categoryId = UUID.randomUUID();
+
+                mockMvc.perform(put("/products/{productId}/categories/{categoryId}", numericId, categoryId))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.status").value(400))
+                        .andExpect(jsonPath("$.message").value("Invalid URL parameter: '" + numericId + "' is not a valid format"));
+
+                verifyNoInteractions(productService);
+            }
+
+            @Test
+            @DisplayName("Should return 400 when categoryId is a plain number instead of UUID")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn400_whenCategoryIdIsNumeric() throws Exception {
+                UUID productId = UUID.randomUUID();
+                String numericId = "67890";
+
+                mockMvc.perform(put("/products/{productId}/categories/{categoryId}", productId, numericId))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.status").value(400))
+                        .andExpect(jsonPath("$.message").value("Invalid URL parameter: '" + numericId + "' is not a valid format"));
+
+                verifyNoInteractions(productService);
+            }
+        }
+
+        // ==================== SERVICE EXCEPTION HANDLING ====================
+
+        @Nested
+        @DisplayName("Service exception handling")
+        class ServiceExceptionHandling {
+
+            @Test
+            @DisplayName("Should return 500 when service throws an unexpected RuntimeException")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn500_whenServiceThrowsRuntimeException() throws Exception {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID categoryId = UUID.randomUUID();
+                doThrow(new RuntimeException("Database connection lost"))
+                        .when(productService).linkCategoryToProduct(eq(productId), eq(categoryId));
+
+                // Act & Assert
+                mockMvc.perform(put(LINK_CATEGORY_URL, productId, categoryId))
+                        .andExpect(status().isInternalServerError())
+                        .andExpect(jsonPath("$.status").value(500))
+                        .andExpect(jsonPath("$.message").value("An unexpected error occurred."));
+            }
+        }
+
+        // ==================== JSON RESPONSE STRUCTURE ====================
+
+        @Nested
+        @DisplayName("JSON response structure validation")
+        class JsonResponseStructure {
+
+            @Test
+            @DisplayName("Error response should contain status, message, and timeStamp fields when product not found")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturnErrorResponseStructure_whenProductNotFound() throws Exception {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID categoryId = UUID.randomUUID();
+                doThrow(new ProductNotFoundException("Product not found"))
+                        .when(productService).linkCategoryToProduct(eq(productId), eq(categoryId));
+
+                // Act & Assert
+                mockMvc.perform(put(LINK_CATEGORY_URL, productId, categoryId))
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.status").value(404))
+                        .andExpect(jsonPath("$.message").isNotEmpty())
+                        .andExpect(jsonPath("$.timeStamp").isNumber());
+            }
+
+            @Test
+            @DisplayName("Error response should contain status, message, and timeStamp fields when category not found")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturnErrorResponseStructure_whenCategoryNotFound() throws Exception {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID categoryId = UUID.randomUUID();
+                doThrow(new CategoryNotFoundException("Category not found"))
+                        .when(productService).linkCategoryToProduct(eq(productId), eq(categoryId));
+
+                // Act & Assert
+                mockMvc.perform(put(LINK_CATEGORY_URL, productId, categoryId))
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.status").value(404))
+                        .andExpect(jsonPath("$.message").isNotEmpty())
+                        .andExpect(jsonPath("$.timeStamp").isNumber());
             }
         }
     }
