@@ -4,9 +4,12 @@ import com.sivan.ecommerce.dto.product.ProductFilterDTO;
 import com.sivan.ecommerce.dto.product.ProductRequestDTO;
 import com.sivan.ecommerce.dto.product.ProductResponseDTO;
 import com.sivan.ecommerce.entity.EntityTestUtil;
+import com.sivan.ecommerce.entity.category.Category;
 import com.sivan.ecommerce.entity.product.Product;
+import com.sivan.ecommerce.exception.CategoryNotFoundException;
 import com.sivan.ecommerce.exception.InvalidDataException;
 import com.sivan.ecommerce.exception.ProductNotFoundException;
+import com.sivan.ecommerce.repository.category.CategoryRepository;
 import com.sivan.ecommerce.repository.product.ProductRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -28,7 +31,6 @@ import org.springframework.data.domain.Sort;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.*;
 
 /**
@@ -42,6 +44,9 @@ class ProductServiceImplTest {
 
     @Mock
     private ProductRepository productRepository;
+
+    @Mock
+    private CategoryRepository categoryRepository;
 
     @InjectMocks
     private ProductServiceImpl productService;
@@ -1245,6 +1250,457 @@ class ProductServiceImplTest {
                 // Assert
                 verify(productRepository, never()).save(any(Product.class));
                 verify(productRepository, never()).findById(any());
+            }
+        }
+    }
+
+    // ======================== linkCategoryToProduct() ========================
+
+    @Nested
+    @DisplayName("linkCategoryToProduct()")
+    class LinkCategoryToProduct {
+
+        // ======================== Helper Methods ========================
+
+        /**
+         * Creates a {@link Product} with a reflectively-set ID and an empty categories set.
+         */
+        private Product validProduct(UUID id) {
+            Product product = new Product(
+                    VALID_TITLE, VALID_DESCRIPTION, VALID_QUANTITY,
+                    VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
+            );
+            EntityTestUtil.setId(product, id);
+            return product;
+        }
+
+        /**
+         * Creates a {@link Category} with a reflectively-set ID.
+         */
+        private Category validCategory(UUID id, String title) {
+            Category category = new Category(title, "Description for " + title);
+            EntityTestUtil.setId(category, id);
+            return category;
+        }
+
+        // ==================== SUCCESS CASES ====================
+
+        @Nested
+        @DisplayName("Success cases")
+        class SuccessCases {
+
+            @Test
+            @DisplayName("Should add the category to the product when both exist")
+            void shouldAddCategoryToProduct_whenBothExist() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID categoryId = UUID.randomUUID();
+                Product product = validProduct(productId);
+                Category category = validCategory(categoryId, "electronics");
+
+                when(productRepository.findByIdWithCategories(productId))
+                        .thenReturn(Optional.of(product));
+                when(categoryRepository.findById(categoryId))
+                        .thenReturn(Optional.of(category));
+
+                // Act
+                productService.linkCategoryToProduct(productId, categoryId);
+
+                // Assert — category was added to product's set
+                assertTrue(product.getCategories().contains(category));
+                assertEquals(1, product.getCategories().size());
+            }
+
+            @Test
+            @DisplayName("Should call findByIdWithCategories exactly once with correct productId")
+            void shouldCallFindByIdWithCategories_exactlyOnce() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID categoryId = UUID.randomUUID();
+                Product product = validProduct(productId);
+                Category category = validCategory(categoryId, "electronics");
+
+                when(productRepository.findByIdWithCategories(productId))
+                        .thenReturn(Optional.of(product));
+                when(categoryRepository.findById(categoryId))
+                        .thenReturn(Optional.of(category));
+
+                // Act
+                productService.linkCategoryToProduct(productId, categoryId);
+
+                // Assert
+                verify(productRepository).findByIdWithCategories(productId);
+            }
+
+            @Test
+            @DisplayName("Should call categoryRepository.findById exactly once with correct categoryId")
+            void shouldCallCategoryFindById_exactlyOnce() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID categoryId = UUID.randomUUID();
+                Product product = validProduct(productId);
+                Category category = validCategory(categoryId, "electronics");
+
+                when(productRepository.findByIdWithCategories(productId))
+                        .thenReturn(Optional.of(product));
+                when(categoryRepository.findById(categoryId))
+                        .thenReturn(Optional.of(category));
+
+                // Act
+                productService.linkCategoryToProduct(productId, categoryId);
+
+                // Assert
+                verify(categoryRepository).findById(categoryId);
+            }
+
+            @Test
+            @DisplayName("Should not call productRepository.save() — relies on Hibernate dirty-checking")
+            void shouldNotCallSave_reliesOnDirtyChecking() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID categoryId = UUID.randomUUID();
+                Product product = validProduct(productId);
+                Category category = validCategory(categoryId, "electronics");
+
+                when(productRepository.findByIdWithCategories(productId))
+                        .thenReturn(Optional.of(product));
+                when(categoryRepository.findById(categoryId))
+                        .thenReturn(Optional.of(category));
+
+                // Act
+                productService.linkCategoryToProduct(productId, categoryId);
+
+                // Assert — no explicit save, Hibernate dirty-checking handles persistence
+                verify(productRepository, never()).save(any(Product.class));
+            }
+
+            @Test
+            @DisplayName("Should not throw when the same category is added again (Set handles duplicates)")
+            void shouldNotThrow_whenCategoryAlreadyLinked() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID categoryId = UUID.randomUUID();
+                Product product = validProduct(productId);
+                Category category = validCategory(categoryId, "electronics");
+
+                // Pre-link the category
+                product.addCategory(category);
+
+                when(productRepository.findByIdWithCategories(productId))
+                        .thenReturn(Optional.of(product));
+                when(categoryRepository.findById(categoryId))
+                        .thenReturn(Optional.of(category));
+
+                // Act — should not throw, Set.add() is idempotent
+                assertDoesNotThrow(() ->
+                        productService.linkCategoryToProduct(productId, categoryId)
+                );
+
+                // Assert — still only one category in the set
+                assertEquals(1, product.getCategories().size());
+            }
+        }
+
+        // ==================== NOT FOUND CASES ====================
+
+        @Nested
+        @DisplayName("Not found cases")
+        class NotFoundCases {
+
+            @Test
+            @DisplayName("Should throw ProductNotFoundException when product does not exist")
+            void shouldThrowProductNotFoundException_whenProductDoesNotExist() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID categoryId = UUID.randomUUID();
+
+                when(productRepository.findByIdWithCategories(productId))
+                        .thenReturn(Optional.empty());
+
+                // Act & Assert
+                ProductNotFoundException exception = assertThrows(
+                        ProductNotFoundException.class,
+                        () -> productService.linkCategoryToProduct(productId, categoryId)
+                );
+                assertEquals("Product not found", exception.getMessage());
+            }
+
+            @Test
+            @DisplayName("Should not call categoryRepository when product is not found")
+            void shouldNotCallCategoryRepository_whenProductNotFound() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID categoryId = UUID.randomUUID();
+
+                when(productRepository.findByIdWithCategories(productId))
+                        .thenReturn(Optional.empty());
+
+                // Act
+                assertThrows(ProductNotFoundException.class,
+                        () -> productService.linkCategoryToProduct(productId, categoryId));
+
+                // Assert — category lookup should never happen
+                verifyNoInteractions(categoryRepository);
+            }
+
+            @Test
+            @DisplayName("Should throw CategoryNotFoundException when category does not exist")
+            void shouldThrowCategoryNotFoundException_whenCategoryDoesNotExist() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID categoryId = UUID.randomUUID();
+                Product product = validProduct(productId);
+
+                when(productRepository.findByIdWithCategories(productId))
+                        .thenReturn(Optional.of(product));
+                when(categoryRepository.findById(categoryId))
+                        .thenReturn(Optional.empty());
+
+                // Act & Assert
+                CategoryNotFoundException exception = assertThrows(
+                        CategoryNotFoundException.class,
+                        () -> productService.linkCategoryToProduct(productId, categoryId)
+                );
+                assertEquals("Category not found", exception.getMessage());
+            }
+
+            @Test
+            @DisplayName("Should not modify product categories when category is not found")
+            void shouldNotModifyProductCategories_whenCategoryNotFound() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID categoryId = UUID.randomUUID();
+                Product product = validProduct(productId);
+
+                when(productRepository.findByIdWithCategories(productId))
+                        .thenReturn(Optional.of(product));
+                when(categoryRepository.findById(categoryId))
+                        .thenReturn(Optional.empty());
+
+                // Act
+                assertThrows(CategoryNotFoundException.class,
+                        () -> productService.linkCategoryToProduct(productId, categoryId));
+
+                // Assert — product's categories should remain empty
+                assertTrue(product.getCategories().isEmpty());
+            }
+        }
+
+        // ==================== REPOSITORY / SERVER FAILURE CASES ====================
+
+        @Nested
+        @DisplayName("Repository failure simulation")
+        class RepositoryFailures {
+
+            @Test
+            @DisplayName("Should propagate RuntimeException when productRepository throws on findByIdWithCategories")
+            void shouldPropagateRuntimeException_whenProductRepositoryThrows() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID categoryId = UUID.randomUUID();
+
+                when(productRepository.findByIdWithCategories(productId))
+                        .thenThrow(new RuntimeException("Database connection lost"));
+
+                // Act & Assert
+                RuntimeException exception = assertThrows(
+                        RuntimeException.class,
+                        () -> productService.linkCategoryToProduct(productId, categoryId)
+                );
+                assertEquals("Database connection lost", exception.getMessage());
+                verifyNoInteractions(categoryRepository);
+            }
+
+            @Test
+            @DisplayName("Should propagate RuntimeException when categoryRepository throws on findById")
+            void shouldPropagateRuntimeException_whenCategoryRepositoryThrows() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID categoryId = UUID.randomUUID();
+                Product product = validProduct(productId);
+
+                when(productRepository.findByIdWithCategories(productId))
+                        .thenReturn(Optional.of(product));
+                when(categoryRepository.findById(categoryId))
+                        .thenThrow(new RuntimeException("Database connection lost"));
+
+                // Act & Assert
+                RuntimeException exception = assertThrows(
+                        RuntimeException.class,
+                        () -> productService.linkCategoryToProduct(productId, categoryId)
+                );
+                assertEquals("Database connection lost", exception.getMessage());
+            }
+
+            @Test
+            @DisplayName("Should propagate IllegalStateException when productRepository encounters unexpected error")
+            void shouldPropagateIllegalStateException_whenProductRepositoryFails() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID categoryId = UUID.randomUUID();
+
+                when(productRepository.findByIdWithCategories(productId))
+                        .thenThrow(new IllegalStateException("Unexpected persistence error"));
+
+                // Act & Assert
+                IllegalStateException exception = assertThrows(
+                        IllegalStateException.class,
+                        () -> productService.linkCategoryToProduct(productId, categoryId)
+                );
+                assertEquals("Unexpected persistence error", exception.getMessage());
+            }
+
+            @Test
+            @DisplayName("Should propagate IllegalStateException when categoryRepository encounters unexpected error")
+            void shouldPropagateIllegalStateException_whenCategoryRepositoryFails() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID categoryId = UUID.randomUUID();
+                Product product = validProduct(productId);
+
+                when(productRepository.findByIdWithCategories(productId))
+                        .thenReturn(Optional.of(product));
+                when(categoryRepository.findById(categoryId))
+                        .thenThrow(new IllegalStateException("Unexpected persistence error"));
+
+                // Act & Assert
+                IllegalStateException exception = assertThrows(
+                        IllegalStateException.class,
+                        () -> productService.linkCategoryToProduct(productId, categoryId)
+                );
+                assertEquals("Unexpected persistence error", exception.getMessage());
+            }
+        }
+
+        // ==================== EDGE CASES ====================
+
+        @Nested
+        @DisplayName("Edge cases")
+        class EdgeCases {
+
+            @Test
+            @DisplayName("Should add category to a product that already has other categories")
+            void shouldAddCategory_whenProductAlreadyHasOtherCategories() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID existingCategoryId = UUID.randomUUID();
+                UUID newCategoryId = UUID.randomUUID();
+
+                Product product = validProduct(productId);
+                Category existingCategory = validCategory(existingCategoryId, "electronics");
+                Category newCategory = validCategory(newCategoryId, "accessories");
+
+                // Pre-link the existing category
+                product.addCategory(existingCategory);
+
+                when(productRepository.findByIdWithCategories(productId))
+                        .thenReturn(Optional.of(product));
+                when(categoryRepository.findById(newCategoryId))
+                        .thenReturn(Optional.of(newCategory));
+
+                // Act
+                productService.linkCategoryToProduct(productId, newCategoryId);
+
+                // Assert — product should now have both categories
+                assertEquals(2, product.getCategories().size());
+                assertTrue(product.getCategories().contains(existingCategory));
+                assertTrue(product.getCategories().contains(newCategory));
+            }
+
+            @Test
+            @DisplayName("Should handle category with special characters in title")
+            void shouldHandleCategory_withSpecialCharactersInTitle() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID categoryId = UUID.randomUUID();
+                Product product = validProduct(productId);
+                Category category = validCategory(categoryId, "laptops & pcs™");
+
+                when(productRepository.findByIdWithCategories(productId))
+                        .thenReturn(Optional.of(product));
+                when(categoryRepository.findById(categoryId))
+                        .thenReturn(Optional.of(category));
+
+                // Act
+                productService.linkCategoryToProduct(productId, categoryId);
+
+                // Assert
+                assertTrue(product.getCategories().contains(category));
+                assertEquals("laptops & pcs™", category.getTitle());
+            }
+        }
+
+        // ==================== REPOSITORY INTERACTION VERIFICATION ====================
+
+        @Nested
+        @DisplayName("Repository interaction verification")
+        class RepositoryInteractionVerification {
+
+            @Test
+            @DisplayName("Should call productRepository before categoryRepository (execution order)")
+            void shouldCallProductRepositoryBeforeCategoryRepository() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID categoryId = UUID.randomUUID();
+                Product product = validProduct(productId);
+                Category category = validCategory(categoryId, "electronics");
+
+                when(productRepository.findByIdWithCategories(productId))
+                        .thenReturn(Optional.of(product));
+                when(categoryRepository.findById(categoryId))
+                        .thenReturn(Optional.of(category));
+
+                // Act
+                productService.linkCategoryToProduct(productId, categoryId);
+
+                // Assert — verify execution order
+                var inOrder = inOrder(productRepository, categoryRepository);
+                inOrder.verify(productRepository).findByIdWithCategories(productId);
+                inOrder.verify(categoryRepository).findById(categoryId);
+            }
+
+            @Test
+            @DisplayName("Should not call any other productRepository methods besides findByIdWithCategories")
+            void shouldNotCallOtherProductRepositoryMethods() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID categoryId = UUID.randomUUID();
+                Product product = validProduct(productId);
+                Category category = validCategory(categoryId, "electronics");
+
+                when(productRepository.findByIdWithCategories(productId))
+                        .thenReturn(Optional.of(product));
+                when(categoryRepository.findById(categoryId))
+                        .thenReturn(Optional.of(category));
+
+                // Act
+                productService.linkCategoryToProduct(productId, categoryId);
+
+                // Assert
+                verify(productRepository).findByIdWithCategories(productId);
+                verifyNoMoreInteractions(productRepository);
+            }
+
+            @Test
+            @DisplayName("Should not call any other categoryRepository methods besides findById")
+            void shouldNotCallOtherCategoryRepositoryMethods() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                UUID categoryId = UUID.randomUUID();
+                Product product = validProduct(productId);
+                Category category = validCategory(categoryId, "electronics");
+
+                when(productRepository.findByIdWithCategories(productId))
+                        .thenReturn(Optional.of(product));
+                when(categoryRepository.findById(categoryId))
+                        .thenReturn(Optional.of(category));
+
+                // Act
+                productService.linkCategoryToProduct(productId, categoryId);
+
+                // Assert
+                verify(categoryRepository).findById(categoryId);
+                verifyNoMoreInteractions(categoryRepository);
             }
         }
     }
