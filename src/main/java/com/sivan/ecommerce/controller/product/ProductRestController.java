@@ -39,4 +39,13 @@ public class ProductRestController {
     public ResponseEntity<Page<ProductResponseDTO>> getProducts(@Valid ProductFilterDTO productFilterDTO, Pageable pageable) {
         return ResponseEntity.ok(productService.getProducts(productFilterDTO, pageable));
     }
+
+    @PutMapping("/{productId}/categories/{categoryId}")
+    public ResponseEntity<Void> linkCategoryToProduct(@PathVariable UUID productId,
+                                                      @PathVariable UUID categoryId) {
+
+        productService.linkCategoryToProduct(productId, categoryId);
+
+        return ResponseEntity.noContent().build();
+    }
 }
