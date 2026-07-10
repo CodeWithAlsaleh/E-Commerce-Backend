@@ -35,6 +35,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -1929,6 +1930,243 @@ class ProductRestControllerTest {
 
                 // Act & Assert
                 mockMvc.perform(put(LINK_CATEGORY_URL, productId, categoryId))
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.status").value(404))
+                        .andExpect(jsonPath("$.message").isNotEmpty())
+                        .andExpect(jsonPath("$.timeStamp").isNumber());
+            }
+        }
+    }
+
+    // ==================== deleteProduct() ====================
+    @Nested
+    @DisplayName("deleteProduct()")
+    class DeleteProduct {
+
+        // ==================== SUCCESS CASES (204) ====================
+
+        @Nested
+        @DisplayName("Success cases — 204 No Content")
+        class SuccessCases {
+
+            @Test
+            @DisplayName("Should return 204 when admin deletes an existing product")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn204_whenAdminDeletesExistingProduct() throws Exception {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                doNothing().when(productService).deleteProduct(eq(productId));
+
+                // Act & Assert
+                mockMvc.perform(delete(PRODUCT_BY_ID_URL, productId))
+                        .andExpect(status().isNoContent());
+
+                verify(productService).deleteProduct(eq(productId));
+            }
+
+            @Test
+            @DisplayName("Should return empty body when delete is successful")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturnEmptyBody_whenDeleteIsSuccessful() throws Exception {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                doNothing().when(productService).deleteProduct(eq(productId));
+
+                // Act & Assert
+                mockMvc.perform(delete(PRODUCT_BY_ID_URL, productId))
+                        .andExpect(status().isNoContent())
+                        .andExpect(jsonPath("$").doesNotExist());
+            }
+
+            @Test
+            @DisplayName("Should call productService.deleteProduct exactly once")
+            @WithMockUser(roles = "ADMIN")
+            void shouldCallServiceExactlyOnce() throws Exception {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                doNothing().when(productService).deleteProduct(eq(productId));
+
+                // Act
+                mockMvc.perform(delete(PRODUCT_BY_ID_URL, productId))
+                        .andExpect(status().isNoContent());
+
+                // Assert
+                verify(productService).deleteProduct(eq(productId));
+                verifyNoMoreInteractions(productService);
+            }
+        }
+
+        // ==================== AUTHENTICATION FAILURES (401) ====================
+
+        @Nested
+        @DisplayName("Authentication failures — 401 Unauthorized")
+        class AuthenticationFailures {
+
+            @Test
+            @DisplayName("Should return 401 when no credentials are provided (anonymous)")
+            void shouldReturn401_whenNoCredentials() throws Exception {
+                UUID productId = UUID.randomUUID();
+
+                mockMvc.perform(delete(PRODUCT_BY_ID_URL, productId))
+                        .andExpect(status().isUnauthorized());
+
+                verifyNoInteractions(productService);
+            }
+
+            @Test
+            @DisplayName("Should return 401 when invalid credentials are provided")
+            void shouldReturn401_whenInvalidCredentials() throws Exception {
+                UUID productId = UUID.randomUUID();
+
+                mockMvc.perform(delete(PRODUCT_BY_ID_URL, productId)
+                                .with(httpBasic("wrong@email.com", "WrongPassword1!")))
+                        .andExpect(status().isUnauthorized());
+
+                verifyNoInteractions(productService);
+            }
+        }
+
+        // ==================== AUTHORIZATION FAILURES (403) ====================
+
+        @Nested
+        @DisplayName("Authorization failures — 403 Forbidden")
+        class AuthorizationFailures {
+
+            @Test
+            @DisplayName("Should return 403 when authenticated user has ROLE_USER (not ADMIN)")
+            @WithMockUser(roles = "USER")
+            void shouldReturn403_whenUserRoleIsNotAdmin() throws Exception {
+                UUID productId = UUID.randomUUID();
+
+                mockMvc.perform(delete(PRODUCT_BY_ID_URL, productId))
+                        .andExpect(status().isForbidden());
+
+                verifyNoInteractions(productService);
+            }
+
+            @Test
+            @DisplayName("Should return 403 when user has no roles at all")
+            @WithMockUser(roles = {})
+            void shouldReturn403_whenUserHasNoRoles() throws Exception {
+                UUID productId = UUID.randomUUID();
+
+                mockMvc.perform(delete(PRODUCT_BY_ID_URL, productId))
+                        .andExpect(status().isForbidden());
+
+                verifyNoInteractions(productService);
+            }
+        }
+
+        // ==================== NOT FOUND CASES (404) ====================
+
+        @Nested
+        @DisplayName("Not found cases — 404 Not Found")
+        class NotFoundCases {
+
+            @Test
+            @DisplayName("Should return 404 when product does not exist")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn404_whenProductNotFound() throws Exception {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                doThrow(new ProductNotFoundException("Product not found"))
+                        .when(productService).deleteProduct(eq(productId));
+
+                // Act & Assert
+                mockMvc.perform(delete(PRODUCT_BY_ID_URL, productId))
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.status").value(404))
+                        .andExpect(jsonPath("$.message").value("Product not found"));
+            }
+        }
+
+        // ==================== INVALID PATH VARIABLE (400) ====================
+
+        @Nested
+        @DisplayName("Invalid path variable — 400 Bad Request")
+        class InvalidPathVariable {
+
+            @Test
+            @DisplayName("Should return 400 when productId is not a valid UUID")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn400_whenProductIdIsNotValidUuid() throws Exception {
+                String pathVariable = "not-a-uuid";
+
+                mockMvc.perform(delete("/products/{productId}", pathVariable))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.status").value(400))
+                        .andExpect(jsonPath("$.message").value("Invalid URL parameter: '" + pathVariable + "' is not a valid format"));
+
+                verifyNoInteractions(productService);
+            }
+
+            @Test
+            @DisplayName("Should return 400 when productId is a plain number instead of UUID")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn400_whenProductIdIsNumeric() throws Exception {
+                String pathVariable = "12345";
+
+                mockMvc.perform(delete("/products/{productId}", pathVariable))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.status").value(400))
+                        .andExpect(jsonPath("$.message").value("Invalid URL parameter: '" + pathVariable + "' is not a valid format"));
+
+                verifyNoInteractions(productService);
+            }
+
+            @Test
+            @DisplayName("Should return 400 when productId is an empty string")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn400_whenProductIdIsEmpty() throws Exception {
+                mockMvc.perform(delete("/products/{productId}", " "))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.status").value(400))
+                        .andExpect(jsonPath("$.message").value("The required 'path variable' is missing from the URL path"));
+
+                verifyNoInteractions(productService);
+            }
+        }
+
+        // ==================== SERVICE EXCEPTION HANDLING ====================
+
+        @Nested
+        @DisplayName("Service exception handling")
+        class ServiceExceptionHandling {
+
+            @Test
+            @DisplayName("Should return 500 when service throws an unexpected RuntimeException")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn500_whenServiceThrowsRuntimeException() throws Exception {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                doThrow(new RuntimeException("Database connection lost"))
+                        .when(productService).deleteProduct(eq(productId));
+
+                // Act & Assert
+                mockMvc.perform(delete(PRODUCT_BY_ID_URL, productId))
+                        .andExpect(status().isInternalServerError())
+                        .andExpect(jsonPath("$.status").value(500))
+                        .andExpect(jsonPath("$.message").value("An unexpected error occurred."));
+            }
+        }
+
+        // ==================== JSON RESPONSE STRUCTURE ====================
+
+        @Nested
+        @DisplayName("JSON response structure validation")
+        class JsonResponseStructure {
+
+            @Test
+            @DisplayName("Error response should contain status, message, and timeStamp fields when product not found")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturnErrorResponseStructure_whenProductNotFound() throws Exception {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                doThrow(new ProductNotFoundException("Product not found"))
+                        .when(productService).deleteProduct(eq(productId));
+
+                // Act & Assert
+                mockMvc.perform(delete(PRODUCT_BY_ID_URL, productId))
                         .andExpect(status().isNotFound())
                         .andExpect(jsonPath("$.status").value(404))
                         .andExpect(jsonPath("$.message").isNotEmpty())
