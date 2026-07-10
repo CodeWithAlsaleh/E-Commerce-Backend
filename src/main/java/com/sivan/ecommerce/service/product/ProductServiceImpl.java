@@ -95,4 +95,13 @@ public class ProductServiceImpl implements ProductService {
          *   fires the SQL INSERT into 'product_category'.
          * */
     }
+
+    @Override
+    @Transactional
+    public void deleteProduct(UUID productId) {
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new ProductNotFoundException("Product not found"));
+
+        product.setActive(false); // We take advantage of "dirty-checking"
+    }
 }
