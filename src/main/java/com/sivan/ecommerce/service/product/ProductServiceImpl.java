@@ -3,6 +3,7 @@ package com.sivan.ecommerce.service.product;
 import com.sivan.ecommerce.dto.product.ProductFilterDTO;
 import com.sivan.ecommerce.dto.product.ProductRequestDTO;
 import com.sivan.ecommerce.dto.product.ProductResponseDTO;
+import com.sivan.ecommerce.dto.product.ProductUpdateRequestDTO;
 import com.sivan.ecommerce.entity.category.Category;
 import com.sivan.ecommerce.entity.product.Product;
 import com.sivan.ecommerce.exception.CategoryNotFoundException;
@@ -103,5 +104,16 @@ public class ProductServiceImpl implements ProductService {
                 .orElseThrow(() -> new ProductNotFoundException("Product not found"));
 
         product.setActive(false); // We take advantage of "dirty-checking"
+    }
+
+    @Override
+    @Transactional
+    public ProductResponseDTO updateProduct(UUID productId, ProductUpdateRequestDTO productUpdateRequestDTO) {
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new ProductNotFoundException("Product not found"));
+
+        ProductMapper.mapProductUpdateRequestToProduct(product, productUpdateRequestDTO);
+
+        return ProductMapper.mapProductToProductResponse(product);
     }
 }

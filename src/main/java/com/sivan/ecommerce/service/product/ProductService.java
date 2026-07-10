@@ -3,6 +3,7 @@ package com.sivan.ecommerce.service.product;
 import com.sivan.ecommerce.dto.product.ProductFilterDTO;
 import com.sivan.ecommerce.dto.product.ProductRequestDTO;
 import com.sivan.ecommerce.dto.product.ProductResponseDTO;
+import com.sivan.ecommerce.dto.product.ProductUpdateRequestDTO;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -19,4 +20,6 @@ public interface ProductService {
     void linkCategoryToProduct(UUID productId, UUID categoryId);
 
     void deleteProduct(UUID productId);
+
+    ProductResponseDTO updateProduct(UUID productId, ProductUpdateRequestDTO productUpdateRequestDTO);
 }
