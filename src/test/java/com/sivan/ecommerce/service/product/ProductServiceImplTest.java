@@ -1704,4 +1704,242 @@ class ProductServiceImplTest {
             }
         }
     }
+
+    // ======================== deleteProduct() ========================
+
+    @Nested
+    @DisplayName("deleteProduct()")
+    class DeleteProduct {
+
+        // ======================== Helper Methods ========================
+
+        /**
+         * Creates a valid active {@link Product} with a reflectively-set ID.
+         */
+        private Product activeProduct(UUID id) {
+            Product product = new Product(
+                    VALID_TITLE, VALID_DESCRIPTION, VALID_QUANTITY,
+                    VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
+            );
+            EntityTestUtil.setId(product, id);
+            return product;
+        }
+
+        /**
+         * Creates an inactive {@link Product} with a reflectively-set ID.
+         */
+        private Product inactiveProduct(UUID id) {
+            Product product = new Product(
+                    VALID_TITLE, VALID_DESCRIPTION, VALID_QUANTITY,
+                    VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
+            );
+            product.setActive(false);
+            EntityTestUtil.setId(product, id);
+            return product;
+        }
+
+        // ==================== SUCCESS CASES ====================
+
+        @Nested
+        @DisplayName("Success cases")
+        class SuccessCases {
+
+            @Test
+            @DisplayName("Should set product isActive to false when product exists and is active")
+            void shouldSetIsActiveToFalse_whenProductExistsAndIsActive() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                Product product = activeProduct(productId);
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
+
+                // Act
+                productService.deleteProduct(productId);
+
+                // Assert — soft delete: isActive flipped to false
+                assertFalse(product.isActive());
+            }
+
+            @Test
+            @DisplayName("Should call repository findById exactly once with correct productId")
+            void shouldCallRepositoryFindById_exactlyOnce() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                Product product = activeProduct(productId);
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
+
+                // Act
+                productService.deleteProduct(productId);
+
+                // Assert
+                verify(productRepository).findById(productId);
+            }
+
+            @Test
+            @DisplayName("Should not call productRepository.save() — relies on Hibernate dirty-checking")
+            void shouldNotCallSave_reliesOnDirtyChecking() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                Product product = activeProduct(productId);
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
+
+                // Act
+                productService.deleteProduct(productId);
+
+                // Assert — no explicit save, Hibernate dirty-checking handles persistence
+                verify(productRepository, never()).save(any(Product.class));
+            }
+
+            @Test
+            @DisplayName("Should not modify any other product fields when deleting")
+            void shouldNotModifyOtherFields_whenDeleting() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                Product product = activeProduct(productId);
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
+
+                // Act
+                productService.deleteProduct(productId);
+
+                // Assert — only isActive changed, everything else untouched
+                assertFalse(product.isActive());
+                assertEquals(VALID_TITLE, product.getTitle());
+                assertEquals(VALID_DESCRIPTION, product.getDescription());
+                assertEquals(VALID_QUANTITY, product.getQuantity());
+                assertEquals(VALID_PRICE, product.getPrice());
+                assertEquals(VALID_CURRENCY, product.getCurrencyCode());
+                assertEquals(VALID_IMAGE_URL, product.getImageUrl());
+            }
+        }
+
+        // ==================== NOT FOUND CASES ====================
+
+        @Nested
+        @DisplayName("Not found cases")
+        class NotFoundCases {
+
+            @Test
+            @DisplayName("Should throw ProductNotFoundException when product does not exist")
+            void shouldThrowProductNotFoundException_whenProductDoesNotExist() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.empty());
+
+                // Act & Assert
+                ProductNotFoundException exception = assertThrows(
+                        ProductNotFoundException.class,
+                        () -> productService.deleteProduct(productId)
+                );
+                assertEquals("Product not found", exception.getMessage());
+                verify(productRepository).findById(productId);
+            }
+        }
+
+        // ==================== REPOSITORY / SERVER FAILURE CASES ====================
+
+        @Nested
+        @DisplayName("Repository failure simulation")
+        class RepositoryFailures {
+
+            @Test
+            @DisplayName("Should propagate RuntimeException when repository throws on findById")
+            void shouldPropagateRuntimeException_whenRepositoryThrowsOnFind() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                when(productRepository.findById(productId))
+                        .thenThrow(new RuntimeException("Database connection lost"));
+
+                // Act & Assert
+                RuntimeException exception = assertThrows(
+                        RuntimeException.class,
+                        () -> productService.deleteProduct(productId)
+                );
+                assertEquals("Database connection lost", exception.getMessage());
+                verify(productRepository).findById(productId);
+            }
+
+            @Test
+            @DisplayName("Should propagate IllegalStateException when repository encounters unexpected error")
+            void shouldPropagateIllegalStateException_whenRepositoryFails() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                when(productRepository.findById(productId))
+                        .thenThrow(new IllegalStateException("Unexpected persistence error"));
+
+                // Act & Assert
+                IllegalStateException exception = assertThrows(
+                        IllegalStateException.class,
+                        () -> productService.deleteProduct(productId)
+                );
+                assertEquals("Unexpected persistence error", exception.getMessage());
+            }
+        }
+
+        // ==================== EDGE CASES ====================
+
+        @Nested
+        @DisplayName("Edge cases")
+        class EdgeCases {
+
+            @Test
+            @DisplayName("Should set isActive to false even when product is already inactive")
+            void shouldSetIsActiveToFalse_whenProductIsAlreadyInactive() {
+                // Arrange — product is already soft-deleted
+                UUID productId = UUID.randomUUID();
+                Product product = inactiveProduct(productId);
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
+
+                // Act — calling delete again should not throw
+                assertDoesNotThrow(() -> productService.deleteProduct(productId));
+
+                // Assert — still inactive
+                assertFalse(product.isActive());
+            }
+        }
+
+        // ==================== REPOSITORY INTERACTION VERIFICATION ====================
+
+        @Nested
+        @DisplayName("Repository interaction verification")
+        class RepositoryInteractionVerification {
+
+            @Test
+            @DisplayName("Should not call any other productRepository methods besides findById")
+            void shouldNotCallOtherProductRepositoryMethods() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                Product product = activeProduct(productId);
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
+
+                // Act
+                productService.deleteProduct(productId);
+
+                // Assert
+                verify(productRepository).findById(productId);
+                verifyNoMoreInteractions(productRepository);
+            }
+
+            @Test
+            @DisplayName("Should not interact with categoryRepository when deleting a product")
+            void shouldNotInteractWithCategoryRepository() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                Product product = activeProduct(productId);
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
+
+                // Act
+                productService.deleteProduct(productId);
+
+                // Assert
+                verifyNoInteractions(categoryRepository);
+            }
+        }
+    }
 }
