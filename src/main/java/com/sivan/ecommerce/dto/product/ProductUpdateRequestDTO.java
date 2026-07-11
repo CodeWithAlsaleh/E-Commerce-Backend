@@ -14,7 +14,7 @@ public record ProductUpdateRequestDTO(@Nullable @Size(min = 3, max = 255) String
                                               message = "URL contains invalid characters or spaces") String imageUrl) {
 
     public ProductUpdateRequestDTO {
-        title = title != null ? title().trim() : null;
+        title = title != null ? title.trim() : null;
         description = description != null ? description.trim() : null;
         currencyCode = currencyCode != null ? currencyCode.trim().toUpperCase() : null;
         imageUrl = imageUrl != null ? imageUrl.trim() : null;
