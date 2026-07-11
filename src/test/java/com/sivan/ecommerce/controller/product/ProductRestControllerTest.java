@@ -5,6 +5,7 @@ import com.sivan.ecommerce.config.SecurityConfig;
 import com.sivan.ecommerce.dto.product.ProductFilterDTO;
 import com.sivan.ecommerce.dto.product.ProductRequestDTO;
 import com.sivan.ecommerce.dto.product.ProductResponseDTO;
+import com.sivan.ecommerce.dto.product.ProductUpdateRequestDTO;
 import com.sivan.ecommerce.exception.CategoryNotFoundException;
 import com.sivan.ecommerce.exception.InvalidDataException;
 import com.sivan.ecommerce.exception.ProductNotFoundException;
@@ -36,6 +37,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -2171,6 +2173,864 @@ class ProductRestControllerTest {
                         .andExpect(jsonPath("$.status").value(404))
                         .andExpect(jsonPath("$.message").isNotEmpty())
                         .andExpect(jsonPath("$.timeStamp").isNumber());
+            }
+        }
+    }
+
+    // ==================== updateProduct() ====================
+    @Nested
+    @DisplayName("updateProduct()")
+    class UpdateProduct {
+
+        // ======================== Helpers ========================
+
+        private ProductUpdateRequestDTO validUpdateRequest() {
+            return new ProductUpdateRequestDTO(
+                    VALID_TITLE, VALID_DESCRIPTION, VALID_QUANTITY,
+                    VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
+            );
+        }
+
+        private ProductResponseDTO validProductResponse(UUID id) {
+            return new ProductResponseDTO(
+                    id.toString(), VALID_TITLE, VALID_DESCRIPTION,
+                    VALID_QUANTITY, VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
+            );
+        }
+
+        // ==================== SUCCESS CASES (200) ====================
+
+        @Nested
+        @DisplayName("Success cases — 200 OK")
+        class SuccessCases {
+
+            @Test
+            @DisplayName("Should return 200 and correct JSON when admin updates a product with all fields")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn200_whenAdminUpdatesWithAllFields() throws Exception {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                when(productService.updateProduct(eq(productId), any(ProductUpdateRequestDTO.class)))
+                        .thenReturn(validProductResponse(productId));
+
+                // Act & Assert
+                mockMvc.perform(patch(PRODUCT_BY_ID_URL, productId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(validUpdateRequest())))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.id").value(productId.toString()))
+                        .andExpect(jsonPath("$.title").value(VALID_TITLE))
+                        .andExpect(jsonPath("$.description").value(VALID_DESCRIPTION))
+                        .andExpect(jsonPath("$.quantity").value(VALID_QUANTITY))
+                        .andExpect(jsonPath("$.price").value(VALID_PRICE))
+                        .andExpect(jsonPath("$.currencyCode").value(VALID_CURRENCY))
+                        .andExpect(jsonPath("$.imageUrl").value(VALID_IMAGE_URL));
+
+                verify(productService).updateProduct(eq(productId), any(ProductUpdateRequestDTO.class));
+            }
+
+            @Test
+            @DisplayName("Should return 200 when admin updates only the title (partial update)")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn200_whenUpdatingOnlyTitle() throws Exception {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                ProductUpdateRequestDTO request = new ProductUpdateRequestDTO(
+                        "Updated Title Here", null, null, null, null, null
+                );
+                ProductResponseDTO response = new ProductResponseDTO(
+                        productId.toString(), "Updated Title Here", VALID_DESCRIPTION,
+                        VALID_QUANTITY, VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
+                );
+                when(productService.updateProduct(eq(productId), any(ProductUpdateRequestDTO.class)))
+                        .thenReturn(response);
+
+                // Act & Assert
+                mockMvc.perform(patch(PRODUCT_BY_ID_URL, productId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.title").value("Updated Title Here"));
+            }
+
+            @Test
+            @DisplayName("Should return 200 when admin updates only the price (partial update)")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn200_whenUpdatingOnlyPrice() throws Exception {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                ProductUpdateRequestDTO request = new ProductUpdateRequestDTO(
+                        null, null, null, 12999L, null, null
+                );
+                ProductResponseDTO response = new ProductResponseDTO(
+                        productId.toString(), VALID_TITLE, VALID_DESCRIPTION,
+                        VALID_QUANTITY, 12999L, VALID_CURRENCY, VALID_IMAGE_URL
+                );
+                when(productService.updateProduct(eq(productId), any(ProductUpdateRequestDTO.class)))
+                        .thenReturn(response);
+
+                // Act & Assert
+                mockMvc.perform(patch(PRODUCT_BY_ID_URL, productId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.price").value(12999L));
+            }
+
+            @Test
+            @DisplayName("Should return 200 when admin updates only the quantity (partial update)")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn200_whenUpdatingOnlyQuantity() throws Exception {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                ProductUpdateRequestDTO request = new ProductUpdateRequestDTO(
+                        null, null, 200, null, null, null
+                );
+                ProductResponseDTO response = new ProductResponseDTO(
+                        productId.toString(), VALID_TITLE, VALID_DESCRIPTION,
+                        200, VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
+                );
+                when(productService.updateProduct(eq(productId), any(ProductUpdateRequestDTO.class)))
+                        .thenReturn(response);
+
+                // Act & Assert
+                mockMvc.perform(patch(PRODUCT_BY_ID_URL, productId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.quantity").value(200));
+            }
+
+            @Test
+            @DisplayName("Should return 200 when admin sends an empty JSON body (no fields to update)")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn200_whenRequestBodyIsEmptyObject() throws Exception {
+                // Arrange — all fields are nullable, so {} is a valid PATCH payload
+                UUID productId = UUID.randomUUID();
+                when(productService.updateProduct(eq(productId), any(ProductUpdateRequestDTO.class)))
+                        .thenReturn(validProductResponse(productId));
+
+                // Act & Assert
+                mockMvc.perform(patch(PRODUCT_BY_ID_URL, productId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{}"))
+                        .andExpect(status().isOk());
+
+                verify(productService).updateProduct(eq(productId), any(ProductUpdateRequestDTO.class));
+            }
+
+            @Test
+            @DisplayName("Should call productService.updateProduct exactly once")
+            @WithMockUser(roles = "ADMIN")
+            void shouldCallServiceExactlyOnce() throws Exception {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                when(productService.updateProduct(eq(productId), any(ProductUpdateRequestDTO.class)))
+                        .thenReturn(validProductResponse(productId));
+
+                // Act
+                mockMvc.perform(patch(PRODUCT_BY_ID_URL, productId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(validUpdateRequest())))
+                        .andExpect(status().isOk());
+
+                // Assert
+                verify(productService).updateProduct(eq(productId), any(ProductUpdateRequestDTO.class));
+                verifyNoMoreInteractions(productService);
+            }
+        }
+
+        // ==================== AUTHENTICATION FAILURES (401) ====================
+
+        @Nested
+        @DisplayName("Authentication failures — 401 Unauthorized")
+        class AuthenticationFailures {
+
+            @Test
+            @DisplayName("Should return 401 when no credentials are provided (anonymous)")
+            void shouldReturn401_whenNoCredentials() throws Exception {
+                UUID productId = UUID.randomUUID();
+
+                mockMvc.perform(patch(PRODUCT_BY_ID_URL, productId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(validUpdateRequest())))
+                        .andExpect(status().isUnauthorized());
+
+                verifyNoInteractions(productService);
+            }
+
+            @Test
+            @DisplayName("Should return 401 when invalid credentials are provided")
+            void shouldReturn401_whenInvalidCredentials() throws Exception {
+                UUID productId = UUID.randomUUID();
+
+                mockMvc.perform(patch(PRODUCT_BY_ID_URL, productId)
+                                .with(httpBasic("wrong@email.com", "WrongPassword1!"))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(validUpdateRequest())))
+                        .andExpect(status().isUnauthorized());
+
+                verifyNoInteractions(productService);
+            }
+        }
+
+        // ==================== AUTHORIZATION FAILURES (403) ====================
+
+        @Nested
+        @DisplayName("Authorization failures — 403 Forbidden")
+        class AuthorizationFailures {
+
+            @Test
+            @DisplayName("Should return 403 when authenticated user has ROLE_USER (not ADMIN)")
+            @WithMockUser(roles = "USER")
+            void shouldReturn403_whenUserRoleIsNotAdmin() throws Exception {
+                UUID productId = UUID.randomUUID();
+
+                mockMvc.perform(patch(PRODUCT_BY_ID_URL, productId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(validUpdateRequest())))
+                        .andExpect(status().isForbidden());
+
+                verifyNoInteractions(productService);
+            }
+
+            @Test
+            @DisplayName("Should return 403 when user has no roles at all")
+            @WithMockUser(roles = {})
+            void shouldReturn403_whenUserHasNoRoles() throws Exception {
+                UUID productId = UUID.randomUUID();
+
+                mockMvc.perform(patch(PRODUCT_BY_ID_URL, productId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(validUpdateRequest())))
+                        .andExpect(status().isForbidden());
+
+                verifyNoInteractions(productService);
+            }
+        }
+
+        // ==================== VALIDATION FAILURES (400) ====================
+
+        @Nested
+        @DisplayName("Validation failures — 400 Bad Request")
+        class ValidationFailures {
+
+            // ---------- title ----------
+
+            @Test
+            @DisplayName("Should return 400 when title is provided but too short (less than 3 characters)")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn400_whenTitleIsTooShort() throws Exception {
+                UUID productId = UUID.randomUUID();
+                ProductUpdateRequestDTO request = new ProductUpdateRequestDTO(
+                        "       AB     ", null, null, null, null, null
+                );
+
+                mockMvc.perform(patch(PRODUCT_BY_ID_URL, productId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.message").isNotEmpty());
+
+                verifyNoInteractions(productService);
+            }
+
+            @Test
+            @DisplayName("Should return 400 when title exceeds 255 characters")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn400_whenTitleTooLong() throws Exception {
+                UUID productId = UUID.randomUUID();
+                ProductUpdateRequestDTO request = new ProductUpdateRequestDTO(
+                        "A".repeat(256), null, null, null, null, null
+                );
+
+                mockMvc.perform(patch(PRODUCT_BY_ID_URL, productId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.message").isNotEmpty());
+
+                verifyNoInteractions(productService);
+            }
+
+            // ---------- description ----------
+
+            @Test
+            @DisplayName("Should return 400 when description is provided but shorter than 40 characters")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn400_whenDescriptionTooShort() throws Exception {
+                UUID productId = UUID.randomUUID();
+                ProductUpdateRequestDTO request = new ProductUpdateRequestDTO(
+                        null, "                                             Too short description                   ", null, null, null, null
+                );
+
+                mockMvc.perform(patch(PRODUCT_BY_ID_URL, productId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.message").isNotEmpty());
+
+                verifyNoInteractions(productService);
+            }
+
+            @Test
+            @DisplayName("Should return 400 when description exceeds 5000 characters")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn400_whenDescriptionTooLong() throws Exception {
+                UUID productId = UUID.randomUUID();
+                ProductUpdateRequestDTO request = new ProductUpdateRequestDTO(
+                        null, "D".repeat(5001), null, null, null, null
+                );
+
+                mockMvc.perform(patch(PRODUCT_BY_ID_URL, productId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.message").isNotEmpty());
+
+                verifyNoInteractions(productService);
+            }
+
+            // ---------- quantity ----------
+
+            @Test
+            @DisplayName("Should return 400 when quantity is negative")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn400_whenQuantityIsNegative() throws Exception {
+                UUID productId = UUID.randomUUID();
+                ProductUpdateRequestDTO request = new ProductUpdateRequestDTO(
+                        null, null, -1, null, null, null
+                );
+
+                mockMvc.perform(patch(PRODUCT_BY_ID_URL, productId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.message").isNotEmpty());
+
+                verifyNoInteractions(productService);
+            }
+
+            // ---------- price ----------
+
+            @Test
+            @DisplayName("Should return 400 when price is negative")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn400_whenPriceIsNegative() throws Exception {
+                UUID productId = UUID.randomUUID();
+                ProductUpdateRequestDTO request = new ProductUpdateRequestDTO(
+                        null, null, null, -100L, null, null
+                );
+
+                mockMvc.perform(patch(PRODUCT_BY_ID_URL, productId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.message").isNotEmpty());
+
+                verifyNoInteractions(productService);
+            }
+
+            // ---------- currencyCode ----------
+
+            @Test
+            @DisplayName("Should return 400 when currencyCode is not exactly 3 characters (too short)")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn400_whenCurrencyCodeTooShort() throws Exception {
+                UUID productId = UUID.randomUUID();
+                ProductUpdateRequestDTO request = new ProductUpdateRequestDTO(
+                        null, null, null, null, "US", null
+                );
+
+                mockMvc.perform(patch(PRODUCT_BY_ID_URL, productId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.message").isNotEmpty());
+
+                verifyNoInteractions(productService);
+            }
+
+            @Test
+            @DisplayName("Should return 400 when currencyCode is not exactly 3 characters (too long)")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn400_whenCurrencyCodeTooLong() throws Exception {
+                UUID productId = UUID.randomUUID();
+                ProductUpdateRequestDTO request = new ProductUpdateRequestDTO(
+                        null, null, null, null, "USDT", null
+                );
+
+                mockMvc.perform(patch(PRODUCT_BY_ID_URL, productId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.message").isNotEmpty());
+
+                verifyNoInteractions(productService);
+            }
+
+            // ---------- imageUrl ----------
+
+            @Test
+            @DisplayName("Should return 400 when imageUrl is not a valid URL format")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn400_whenImageUrlIsInvalid() throws Exception {
+                UUID productId = UUID.randomUUID();
+                ProductUpdateRequestDTO request = new ProductUpdateRequestDTO(
+                        null, null, null, null, null, "not-a-url"
+                );
+
+                mockMvc.perform(patch(PRODUCT_BY_ID_URL, productId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.message").isNotEmpty());
+
+                verifyNoInteractions(productService);
+            }
+
+            @Test
+            @DisplayName("Should return 400 when imageUrl exceeds 512 characters")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn400_whenImageUrlTooLong() throws Exception {
+                // Build a URL that exceeds the 512-char limit
+                UUID productId = UUID.randomUUID();
+                String longUrl = "https://example.com/" + "a".repeat(500);
+                ProductUpdateRequestDTO request = new ProductUpdateRequestDTO(
+                        null, null, null, null, null, longUrl
+                );
+
+                mockMvc.perform(patch(PRODUCT_BY_ID_URL, productId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.message").isNotEmpty());
+
+                verifyNoInteractions(productService);
+            }
+
+            // ---------- multiple invalid fields ----------
+
+            @Test
+            @DisplayName("Should return 400 when multiple fields are invalid at once")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn400_whenMultipleFieldsAreInvalid() throws Exception {
+                UUID productId = UUID.randomUUID();
+                ProductUpdateRequestDTO request = new ProductUpdateRequestDTO(
+                        "AB", "Short", -5, -100L, "TOOLONG", "not-a-url"
+                );
+
+                mockMvc.perform(patch(PRODUCT_BY_ID_URL, productId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.status").value(400))
+                        .andExpect(jsonPath("$.message").isNotEmpty());
+
+                verifyNoInteractions(productService);
+            }
+        }
+
+        // ==================== NOT FOUND CASES (404) ====================
+
+        @Nested
+        @DisplayName("Not found cases — 404 Not Found")
+        class NotFoundCases {
+
+            @Test
+            @DisplayName("Should return 404 when product does not exist")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn404_whenProductNotFound() throws Exception {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                when(productService.updateProduct(eq(productId), any(ProductUpdateRequestDTO.class)))
+                        .thenThrow(new ProductNotFoundException("Product not found"));
+
+                // Act & Assert
+                mockMvc.perform(patch(PRODUCT_BY_ID_URL, productId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(validUpdateRequest())))
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.status").value(404))
+                        .andExpect(jsonPath("$.message").value("Product not found"));
+            }
+        }
+
+        // ==================== INVALID PATH VARIABLE (400) ====================
+
+        @Nested
+        @DisplayName("Invalid path variable — 400 Bad Request")
+        class InvalidPathVariable {
+
+            @Test
+            @DisplayName("Should return 400 when productId is not a valid UUID")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn400_whenProductIdIsNotValidUuid() throws Exception {
+                String pathVariable = "not-a-uuid";
+
+                mockMvc.perform(patch("/products/{productId}", pathVariable)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(validUpdateRequest())))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.status").value(400))
+                        .andExpect(jsonPath("$.message").value("Invalid URL parameter: '" + pathVariable + "' is not a valid format"));
+
+                verifyNoInteractions(productService);
+            }
+
+            @Test
+            @DisplayName("Should return 400 when productId is a plain number instead of UUID")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn400_whenProductIdIsNumeric() throws Exception {
+                String pathVariable = "12345";
+
+                mockMvc.perform(patch("/products/{productId}", pathVariable)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(validUpdateRequest())))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.status").value(400))
+                        .andExpect(jsonPath("$.message").value("Invalid URL parameter: '" + pathVariable + "' is not a valid format"));
+
+                verifyNoInteractions(productService);
+            }
+
+            @Test
+            @DisplayName("Should return 400 when productId is an empty string")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn400_whenProductIdIsEmpty() throws Exception {
+                mockMvc.perform(patch("/products/{productId}", " ")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(validUpdateRequest())))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.status").value(400))
+                        .andExpect(jsonPath("$.message").value("The required 'path variable' is missing from the URL path"));
+
+                verifyNoInteractions(productService);
+            }
+        }
+
+        // ==================== SERVICE EXCEPTION HANDLING ====================
+
+        @Nested
+        @DisplayName("Service exception handling")
+        class ServiceExceptionHandling {
+
+            @Test
+            @DisplayName("Should return 500 when service throws an unexpected RuntimeException")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn500_whenServiceThrowsRuntimeException() throws Exception {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                when(productService.updateProduct(eq(productId), any(ProductUpdateRequestDTO.class)))
+                        .thenThrow(new RuntimeException("Database connection lost"));
+
+                // Act & Assert
+                mockMvc.perform(patch(PRODUCT_BY_ID_URL, productId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(validUpdateRequest())))
+                        .andExpect(status().isInternalServerError())
+                        .andExpect(jsonPath("$.status").value(500))
+                        .andExpect(jsonPath("$.message").value("An unexpected error occurred."));
+            }
+        }
+
+        // ==================== MALFORMED INPUT ====================
+
+        @Nested
+        @DisplayName("Malformed input")
+        class MalformedInput {
+
+            @Test
+            @DisplayName("Should return 400 when request body is malformed JSON")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn400_whenJsonIsMalformed() throws Exception {
+                UUID productId = UUID.randomUUID();
+                String malformedJson = "{ \"title\": \"Test\", \"price\": }";
+
+                mockMvc.perform(patch(PRODUCT_BY_ID_URL, productId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(malformedJson))
+                        .andExpect(status().isBadRequest());
+
+                verifyNoInteractions(productService);
+            }
+
+            @Test
+            @DisplayName("Should return 400 when request body is missing entirely")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn400_whenRequestBodyIsMissing() throws Exception {
+                UUID productId = UUID.randomUUID();
+
+                mockMvc.perform(patch(PRODUCT_BY_ID_URL, productId)
+                                .contentType(MediaType.APPLICATION_JSON))
+                        .andExpect(status().isBadRequest());
+
+                verifyNoInteractions(productService);
+            }
+
+            @Test
+            @DisplayName("Should return 400 when quantity is a string instead of a number")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn400_whenQuantityIsWrongType() throws Exception {
+                UUID productId = UUID.randomUUID();
+                String badJson = """
+                        {
+                            "quantity": "not-a-number"
+                        }
+                        """;
+
+                mockMvc.perform(patch(PRODUCT_BY_ID_URL, productId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(badJson))
+                        .andExpect(status().isBadRequest());
+
+                verifyNoInteractions(productService);
+            }
+
+            @Test
+            @DisplayName("Should return 400 when price is a string instead of a number")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn400_whenPriceIsWrongType() throws Exception {
+                UUID productId = UUID.randomUUID();
+                String badJson = """
+                        {
+                            "price": "expensive"
+                        }
+                        """;
+
+                mockMvc.perform(patch(PRODUCT_BY_ID_URL, productId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(badJson))
+                        .andExpect(status().isBadRequest());
+
+                verifyNoInteractions(productService);
+            }
+        }
+
+        // ==================== JSON RESPONSE STRUCTURE ====================
+
+        @Nested
+        @DisplayName("JSON response structure validation")
+        class JsonResponseStructure {
+
+            @Test
+            @DisplayName("Should return all expected fields in the success response")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturnAllFieldsInResponse() throws Exception {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                when(productService.updateProduct(eq(productId), any(ProductUpdateRequestDTO.class)))
+                        .thenReturn(validProductResponse(productId));
+
+                // Act & Assert
+                mockMvc.perform(patch(PRODUCT_BY_ID_URL, productId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(validUpdateRequest())))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.id").exists())
+                        .andExpect(jsonPath("$.title").exists())
+                        .andExpect(jsonPath("$.description").exists())
+                        .andExpect(jsonPath("$.quantity").exists())
+                        .andExpect(jsonPath("$.price").exists())
+                        .andExpect(jsonPath("$.currencyCode").exists())
+                        .andExpect(jsonPath("$.imageUrl").exists());
+            }
+
+            @Test
+            @DisplayName("Error response should contain status, message, and timeStamp fields")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturnErrorResponseStructure() throws Exception {
+                // Arrange — trigger a not-found error
+                UUID productId = UUID.randomUUID();
+                when(productService.updateProduct(eq(productId), any(ProductUpdateRequestDTO.class)))
+                        .thenThrow(new ProductNotFoundException("Product not found"));
+
+                // Act & Assert
+                mockMvc.perform(patch(PRODUCT_BY_ID_URL, productId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(validUpdateRequest())))
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.status").value(404))
+                        .andExpect(jsonPath("$.message").isNotEmpty())
+                        .andExpect(jsonPath("$.timeStamp").isNumber());
+            }
+        }
+
+        // ==================== EDGE CASES ====================
+
+        @Nested
+        @DisplayName("Edge cases")
+        class EdgeCases {
+
+            @Test
+            @DisplayName("Should return 200 when title is exactly 3 characters (boundary minimum)")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn200_whenTitleIsExactlyMinLength() throws Exception {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                ProductUpdateRequestDTO request = new ProductUpdateRequestDTO(
+                        "Abc", null, null, null, null, null
+                );
+                ProductResponseDTO response = new ProductResponseDTO(
+                        productId.toString(), "Abc", VALID_DESCRIPTION,
+                        VALID_QUANTITY, VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
+                );
+                when(productService.updateProduct(eq(productId), any(ProductUpdateRequestDTO.class)))
+                        .thenReturn(response);
+
+                // Act & Assert
+                mockMvc.perform(patch(PRODUCT_BY_ID_URL, productId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.title").value("Abc"));
+            }
+
+            @Test
+            @DisplayName("Should return 200 when title is exactly 255 characters (boundary maximum)")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn200_whenTitleIsExactlyMaxLength() throws Exception {
+                // Arrange
+                String maxTitle = "T".repeat(255);
+                UUID productId = UUID.randomUUID();
+                ProductUpdateRequestDTO request = new ProductUpdateRequestDTO(
+                        maxTitle, null, null, null, null, null
+                );
+                ProductResponseDTO response = new ProductResponseDTO(
+                        productId.toString(), maxTitle, VALID_DESCRIPTION,
+                        VALID_QUANTITY, VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
+                );
+                when(productService.updateProduct(eq(productId), any(ProductUpdateRequestDTO.class)))
+                        .thenReturn(response);
+
+                // Act & Assert
+                mockMvc.perform(patch(PRODUCT_BY_ID_URL, productId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                        .andExpect(status().isOk());
+            }
+
+            @Test
+            @DisplayName("Should return 200 when quantity is zero (boundary minimum)")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn200_whenQuantityIsZero() throws Exception {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                ProductUpdateRequestDTO request = new ProductUpdateRequestDTO(
+                        null, null, 0, null, null, null
+                );
+                ProductResponseDTO response = new ProductResponseDTO(
+                        productId.toString(), VALID_TITLE, VALID_DESCRIPTION,
+                        0, VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
+                );
+                when(productService.updateProduct(eq(productId), any(ProductUpdateRequestDTO.class)))
+                        .thenReturn(response);
+
+                // Act & Assert
+                mockMvc.perform(patch(PRODUCT_BY_ID_URL, productId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.quantity").value(0));
+            }
+
+            @Test
+            @DisplayName("Should return 200 when price is zero (boundary minimum)")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn200_whenPriceIsZero() throws Exception {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                ProductUpdateRequestDTO request = new ProductUpdateRequestDTO(
+                        null, null, null, 0L, null, null
+                );
+                ProductResponseDTO response = new ProductResponseDTO(
+                        productId.toString(), VALID_TITLE, VALID_DESCRIPTION,
+                        VALID_QUANTITY, 0L, VALID_CURRENCY, VALID_IMAGE_URL
+                );
+                when(productService.updateProduct(eq(productId), any(ProductUpdateRequestDTO.class)))
+                        .thenReturn(response);
+
+                // Act & Assert
+                mockMvc.perform(patch(PRODUCT_BY_ID_URL, productId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.price").value(0));
+            }
+
+            @Test
+            @DisplayName("Should return 200 when description is exactly 40 characters (boundary minimum)")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn200_whenDescriptionIsExactlyMinLength() throws Exception {
+                // Arrange
+                String exactly40 = "A".repeat(40);
+                UUID productId = UUID.randomUUID();
+                ProductUpdateRequestDTO request = new ProductUpdateRequestDTO(
+                        null, exactly40, null, null, null, null
+                );
+                ProductResponseDTO response = new ProductResponseDTO(
+                        productId.toString(), VALID_TITLE, exactly40,
+                        VALID_QUANTITY, VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
+                );
+                when(productService.updateProduct(eq(productId), any(ProductUpdateRequestDTO.class)))
+                        .thenReturn(response);
+
+                // Act & Assert
+                mockMvc.perform(patch(PRODUCT_BY_ID_URL, productId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.description").value(exactly40));
+            }
+
+            @Test
+            @DisplayName("Should return 200 when description is exactly 5000 characters (boundary maximum)")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn200_whenDescriptionIsExactlyMaxLength() throws Exception {
+                // Arrange
+                String exactly5000 = "D".repeat(5000);
+                UUID productId = UUID.randomUUID();
+                ProductUpdateRequestDTO request = new ProductUpdateRequestDTO(
+                        null, exactly5000, null, null, null, null
+                );
+                ProductResponseDTO response = new ProductResponseDTO(
+                        productId.toString(), VALID_TITLE, exactly5000,
+                        VALID_QUANTITY, VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
+                );
+                when(productService.updateProduct(eq(productId), any(ProductUpdateRequestDTO.class)))
+                        .thenReturn(response);
+
+                // Act & Assert
+                mockMvc.perform(patch(PRODUCT_BY_ID_URL, productId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                        .andExpect(status().isOk());
+            }
+
+            @Test
+            @DisplayName("Should return 200 when imageUrl is exactly 512 characters (boundary maximum)")
+            @WithMockUser(roles = "ADMIN")
+            void shouldReturn200_whenImageUrlIsExactlyMaxLength() throws Exception {
+                // Arrange — build a valid URL that is exactly 512 characters
+                String prefix = "https://example.com/";
+                String maxUrl = prefix + "a".repeat(512 - prefix.length());
+                UUID productId = UUID.randomUUID();
+                ProductUpdateRequestDTO request = new ProductUpdateRequestDTO(
+                        null, null, null, null, null, maxUrl
+                );
+                ProductResponseDTO response = new ProductResponseDTO(
+                        productId.toString(), VALID_TITLE, VALID_DESCRIPTION,
+                        VALID_QUANTITY, VALID_PRICE, VALID_CURRENCY, maxUrl
+                );
+                when(productService.updateProduct(eq(productId), any(ProductUpdateRequestDTO.class)))
+                        .thenReturn(response);
+
+                // Act & Assert
+                mockMvc.perform(patch(PRODUCT_BY_ID_URL, productId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.imageUrl").value(maxUrl));
             }
         }
     }
