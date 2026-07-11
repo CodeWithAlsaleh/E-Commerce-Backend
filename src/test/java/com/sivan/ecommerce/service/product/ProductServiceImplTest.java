@@ -3,6 +3,7 @@ package com.sivan.ecommerce.service.product;
 import com.sivan.ecommerce.dto.product.ProductFilterDTO;
 import com.sivan.ecommerce.dto.product.ProductRequestDTO;
 import com.sivan.ecommerce.dto.product.ProductResponseDTO;
+import com.sivan.ecommerce.dto.product.ProductUpdateRequestDTO;
 import com.sivan.ecommerce.entity.EntityTestUtil;
 import com.sivan.ecommerce.entity.category.Category;
 import com.sivan.ecommerce.entity.product.Product;
@@ -60,6 +61,19 @@ class ProductServiceImplTest {
     private static final long VALID_PRICE = 7999L;
     private static final String VALID_CURRENCY = "USD";
     private static final String VALID_IMAGE_URL = "https://example.com/images/headphones.png";
+
+    /**
+     * Creates an inactive {@link Product} with a reflectively-set ID.
+     */
+    private Product inactiveProduct(UUID id) {
+        Product product = new Product(
+                VALID_TITLE, VALID_DESCRIPTION, VALID_QUANTITY,
+                VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
+        );
+        product.setActive(false);
+        EntityTestUtil.setId(product, id);
+        return product;
+    }
 
     // ======================== createProduct() ========================
 
@@ -1725,19 +1739,6 @@ class ProductServiceImplTest {
             return product;
         }
 
-        /**
-         * Creates an inactive {@link Product} with a reflectively-set ID.
-         */
-        private Product inactiveProduct(UUID id) {
-            Product product = new Product(
-                    VALID_TITLE, VALID_DESCRIPTION, VALID_QUANTITY,
-                    VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
-            );
-            product.setActive(false);
-            EntityTestUtil.setId(product, id);
-            return product;
-        }
-
         // ==================== SUCCESS CASES ====================
 
         @Nested
@@ -1936,6 +1937,714 @@ class ProductServiceImplTest {
 
                 // Act
                 productService.deleteProduct(productId);
+
+                // Assert
+                verifyNoInteractions(categoryRepository);
+            }
+        }
+    }
+
+    // ======================== updateProduct() ========================
+
+    @Nested
+    @DisplayName("updateProduct()")
+    class UpdateProduct {
+
+        // ======================== Helper Methods ========================
+
+        /**
+         * Creates a valid active {@link Product} with a reflectively-set ID.
+         */
+        private Product existingProduct(UUID id) {
+            Product product = new Product(
+                    VALID_TITLE, VALID_DESCRIPTION, VALID_QUANTITY,
+                    VALID_PRICE, VALID_CURRENCY, VALID_IMAGE_URL
+            );
+            EntityTestUtil.setId(product, id);
+            return product;
+        }
+
+        /**
+         * Builds a {@link ProductUpdateRequestDTO} with all fields populated.
+         */
+        private ProductUpdateRequestDTO fullUpdateRequest() {
+            return new ProductUpdateRequestDTO(
+                    "Updated Headphones",
+                    "This is a fully updated product description that meets the minimum length requirement.",
+                    100,
+                    14999L,
+                    "EUR",
+                    "https://example.com/images/updated-headphones.png"
+            );
+        }
+
+        /**
+         * Builds a {@link ProductUpdateRequestDTO} with all fields null (no-op update).
+         */
+        private ProductUpdateRequestDTO emptyUpdateRequest() {
+            return new ProductUpdateRequestDTO(null, null, null, null, null, null);
+        }
+
+        // ==================== SUCCESS CASES ====================
+
+        @Nested
+        @DisplayName("Success cases")
+        class SuccessCases {
+
+            @Test
+            @DisplayName("Should return updated ProductResponseDTO when all fields are provided")
+            void shouldReturnUpdatedProductResponseDTO_whenAllFieldsAreProvided() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                Product product = existingProduct(productId);
+                ProductUpdateRequestDTO updateRequest = fullUpdateRequest();
+
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
+
+                // Act
+                ProductResponseDTO response = productService.updateProduct(productId, updateRequest);
+
+                // Assert
+                assertNotNull(response);
+                assertEquals(productId.toString(), response.id());
+                assertEquals(updateRequest.title(), response.title());
+                assertEquals(updateRequest.description(), response.description());
+                assertEquals(updateRequest.quantity(), response.quantity());
+                assertEquals(updateRequest.price(), response.price());
+                assertEquals(updateRequest.currencyCode(), response.currencyCode());
+                assertEquals(updateRequest.imageUrl(), response.imageUrl());
+            }
+
+            @Test
+            @DisplayName("Should update only the title when only title is provided")
+            void shouldUpdateOnlyTitle_whenOnlyTitleIsProvided() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                Product product = existingProduct(productId);
+                ProductUpdateRequestDTO updateRequest = new ProductUpdateRequestDTO(
+                        "New Title", null, null, null, null, null
+                );
+
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
+
+                // Act
+                ProductResponseDTO response = productService.updateProduct(productId, updateRequest);
+
+                // Assert
+                assertEquals("New Title", response.title());
+                assertEquals(VALID_DESCRIPTION, response.description());
+                assertEquals(VALID_QUANTITY, response.quantity());
+                assertEquals(VALID_PRICE, response.price());
+                assertEquals(VALID_CURRENCY, response.currencyCode());
+                assertEquals(VALID_IMAGE_URL, response.imageUrl());
+            }
+
+            @Test
+            @DisplayName("Should update only the description when only description is provided")
+            void shouldUpdateOnlyDescription_whenOnlyDescriptionIsProvided() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                Product product = existingProduct(productId);
+                String newDescription = "A completely new and updated description that is long enough to pass validation.";
+                ProductUpdateRequestDTO updateRequest = new ProductUpdateRequestDTO(
+                        null, newDescription, null, null, null, null
+                );
+
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
+
+                // Act
+                ProductResponseDTO response = productService.updateProduct(productId, updateRequest);
+
+                // Assert
+                assertEquals(VALID_TITLE, response.title());
+                assertEquals(newDescription, response.description());
+                assertEquals(VALID_QUANTITY, response.quantity());
+                assertEquals(VALID_PRICE, response.price());
+                assertEquals(VALID_CURRENCY, response.currencyCode());
+                assertEquals(VALID_IMAGE_URL, response.imageUrl());
+            }
+
+            @Test
+            @DisplayName("Should update only the quantity when only quantity is provided")
+            void shouldUpdateOnlyQuantity_whenOnlyQuantityIsProvided() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                Product product = existingProduct(productId);
+                ProductUpdateRequestDTO updateRequest = new ProductUpdateRequestDTO(
+                        null, null, 200, null, null, null
+                );
+
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
+
+                // Act
+                ProductResponseDTO response = productService.updateProduct(productId, updateRequest);
+
+                // Assert
+                assertEquals(VALID_TITLE, response.title());
+                assertEquals(VALID_DESCRIPTION, response.description());
+                assertEquals(200, response.quantity());
+                assertEquals(VALID_PRICE, response.price());
+                assertEquals(VALID_CURRENCY, response.currencyCode());
+                assertEquals(VALID_IMAGE_URL, response.imageUrl());
+            }
+
+            @Test
+            @DisplayName("Should update only the price when only price is provided")
+            void shouldUpdateOnlyPrice_whenOnlyPriceIsProvided() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                Product product = existingProduct(productId);
+                ProductUpdateRequestDTO updateRequest = new ProductUpdateRequestDTO(
+                        null, null, null, 25000L, null, null
+                );
+
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
+
+                // Act
+                ProductResponseDTO response = productService.updateProduct(productId, updateRequest);
+
+                // Assert
+                assertEquals(VALID_TITLE, response.title());
+                assertEquals(VALID_DESCRIPTION, response.description());
+                assertEquals(VALID_QUANTITY, response.quantity());
+                assertEquals(25000L, response.price());
+                assertEquals(VALID_CURRENCY, response.currencyCode());
+                assertEquals(VALID_IMAGE_URL, response.imageUrl());
+            }
+
+            @Test
+            @DisplayName("Should update only the currency code when only currencyCode is provided")
+            void shouldUpdateOnlyCurrencyCode_whenOnlyCurrencyCodeIsProvided() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                Product product = existingProduct(productId);
+                ProductUpdateRequestDTO updateRequest = new ProductUpdateRequestDTO(
+                        null, null, null, null, "eur", null
+                );
+
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
+
+                // Act
+                ProductResponseDTO response = productService.updateProduct(productId, updateRequest);
+
+                // Assert — DTO compact constructor trims and uppercases
+                assertEquals(VALID_TITLE, response.title());
+                assertEquals(VALID_DESCRIPTION, response.description());
+                assertEquals(VALID_QUANTITY, response.quantity());
+                assertEquals(VALID_PRICE, response.price());
+                assertEquals("EUR", response.currencyCode());
+                assertEquals(VALID_IMAGE_URL, response.imageUrl());
+            }
+
+            @Test
+            @DisplayName("Should update only the image URL when only imageUrl is provided")
+            void shouldUpdateOnlyImageUrl_whenOnlyImageUrlIsProvided() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                Product product = existingProduct(productId);
+                String newImageUrl = "https://cdn.example.com/images/new-photo.png";
+                ProductUpdateRequestDTO updateRequest = new ProductUpdateRequestDTO(
+                        null, null, null, null, null, newImageUrl
+                );
+
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
+
+                // Act
+                ProductResponseDTO response = productService.updateProduct(productId, updateRequest);
+
+                // Assert
+                assertEquals(VALID_TITLE, response.title());
+                assertEquals(VALID_DESCRIPTION, response.description());
+                assertEquals(VALID_QUANTITY, response.quantity());
+                assertEquals(VALID_PRICE, response.price());
+                assertEquals(VALID_CURRENCY, response.currencyCode());
+                assertEquals(newImageUrl, response.imageUrl());
+            }
+
+            @Test
+            @DisplayName("Should update multiple fields simultaneously when provided")
+            void shouldUpdateMultipleFields_whenMultipleFieldsAreProvided() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                Product product = existingProduct(productId);
+                ProductUpdateRequestDTO updateRequest = new ProductUpdateRequestDTO(
+                        "Updated Title", null, 75, 9999L, null, null
+                );
+
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
+
+                // Act
+                ProductResponseDTO response = productService.updateProduct(productId, updateRequest);
+
+                // Assert — only title, quantity, price changed
+                assertEquals("Updated Title", response.title());
+                assertEquals(VALID_DESCRIPTION, response.description());
+                assertEquals(75, response.quantity());
+                assertEquals(9999L, response.price());
+                assertEquals(VALID_CURRENCY, response.currencyCode());
+                assertEquals(VALID_IMAGE_URL, response.imageUrl());
+            }
+
+            @Test
+            @DisplayName("Should return all original values when all update fields are null (no-op)")
+            void shouldReturnOriginalValues_whenAllFieldsAreNull() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                Product product = existingProduct(productId);
+                ProductUpdateRequestDTO updateRequest = emptyUpdateRequest();
+
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
+
+                // Act
+                ProductResponseDTO response = productService.updateProduct(productId, updateRequest);
+
+                // Assert — nothing changed
+                assertNotNull(response);
+                assertEquals(productId.toString(), response.id());
+                assertEquals(VALID_TITLE, response.title());
+                assertEquals(VALID_DESCRIPTION, response.description());
+                assertEquals(VALID_QUANTITY, response.quantity());
+                assertEquals(VALID_PRICE, response.price());
+                assertEquals(VALID_CURRENCY, response.currencyCode());
+                assertEquals(VALID_IMAGE_URL, response.imageUrl());
+            }
+
+            @Test
+            @DisplayName("Should call repository findById exactly once with correct productId")
+            void shouldCallRepositoryFindById_exactlyOnce() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                Product product = existingProduct(productId);
+
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
+
+                // Act
+                productService.updateProduct(productId, fullUpdateRequest());
+
+                // Assert
+                verify(productRepository).findById(productId);
+            }
+        }
+
+        // ==================== NOT FOUND CASES ====================
+
+        @Nested
+        @DisplayName("Not found cases")
+        class NotFoundCases {
+
+            @Test
+            @DisplayName("Should throw ProductNotFoundException when product does not exist")
+            void shouldThrowProductNotFoundException_whenProductDoesNotExist() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                ProductUpdateRequestDTO updateRequest = fullUpdateRequest();
+
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.empty());
+
+                // Act & Assert
+                ProductNotFoundException exception = assertThrows(
+                        ProductNotFoundException.class,
+                        () -> productService.updateProduct(productId, updateRequest)
+                );
+                assertEquals("Product not found", exception.getMessage());
+                verify(productRepository).findById(productId);
+            }
+        }
+
+        // ==================== REPOSITORY / SERVER FAILURE CASES ====================
+
+        @Nested
+        @DisplayName("Repository failure simulation")
+        class RepositoryFailures {
+
+            @Test
+            @DisplayName("Should propagate RuntimeException when repository throws on findById")
+            void shouldPropagateRuntimeException_whenRepositoryThrowsOnFind() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                when(productRepository.findById(productId))
+                        .thenThrow(new RuntimeException("Database connection lost"));
+
+                // Act & Assert
+                RuntimeException exception = assertThrows(
+                        RuntimeException.class,
+                        () -> productService.updateProduct(productId, fullUpdateRequest())
+                );
+                assertEquals("Database connection lost", exception.getMessage());
+                verify(productRepository).findById(productId);
+            }
+
+            @Test
+            @DisplayName("Should propagate IllegalStateException when repository encounters unexpected error")
+            void shouldPropagateIllegalStateException_whenRepositoryFails() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                when(productRepository.findById(productId))
+                        .thenThrow(new IllegalStateException("Unexpected persistence error"));
+
+                // Act & Assert
+                IllegalStateException exception = assertThrows(
+                        IllegalStateException.class,
+                        () -> productService.updateProduct(productId, fullUpdateRequest())
+                );
+                assertEquals("Unexpected persistence error", exception.getMessage());
+                verify(productRepository).findById(productId);
+            }
+        }
+
+        // ==================== EDGE CASES ====================
+
+        @Nested
+        @DisplayName("Edge cases")
+        class EdgeCases {
+
+            @Test
+            @DisplayName("Should handle zero quantity in update without error")
+            void shouldHandleZeroQuantity_inUpdate() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                Product product = existingProduct(productId);
+                ProductUpdateRequestDTO updateRequest = new ProductUpdateRequestDTO(
+                        null, null, 0, null, null, null
+                );
+
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
+
+                // Act
+                ProductResponseDTO response = productService.updateProduct(productId, updateRequest);
+
+                // Assert
+                assertEquals(0, response.quantity());
+            }
+
+            @Test
+            @DisplayName("Should handle zero price in update without error")
+            void shouldHandleZeroPrice_inUpdate() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                Product product = existingProduct(productId);
+                ProductUpdateRequestDTO updateRequest = new ProductUpdateRequestDTO(
+                        null, null, null, 0L, null, null
+                );
+
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
+
+                // Act
+                ProductResponseDTO response = productService.updateProduct(productId, updateRequest);
+
+                // Assert
+                assertEquals(0L, response.price());
+            }
+
+            @Test
+            @DisplayName("Should handle max integer value for quantity in update")
+            void shouldHandleMaxIntegerQuantity_inUpdate() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                Product product = existingProduct(productId);
+                ProductUpdateRequestDTO updateRequest = new ProductUpdateRequestDTO(
+                        null, null, Integer.MAX_VALUE, null, null, null
+                );
+
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
+
+                // Act
+                ProductResponseDTO response = productService.updateProduct(productId, updateRequest);
+
+                // Assert
+                assertEquals(Integer.MAX_VALUE, response.quantity());
+            }
+
+            @Test
+            @DisplayName("Should handle max long value for price in update")
+            void shouldHandleMaxLongPrice_inUpdate() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                Product product = existingProduct(productId);
+                ProductUpdateRequestDTO updateRequest = new ProductUpdateRequestDTO(
+                        null, null, null, Long.MAX_VALUE, null, null
+                );
+
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
+
+                // Act
+                ProductResponseDTO response = productService.updateProduct(productId, updateRequest);
+
+                // Assert
+                assertEquals(Long.MAX_VALUE, response.price());
+            }
+
+            @Test
+            @DisplayName("Should handle special characters in title and description during update")
+            void shouldHandleSpecialCharacters_inUpdate() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                Product product = existingProduct(productId);
+                String specialTitle = "Laptop™ — Pro Edition «2024»";
+                String specialDescription = "Features: résumé-ready display, naïve AI engine, 日本語サポート & more! @#$%^&*()";
+                ProductUpdateRequestDTO updateRequest = new ProductUpdateRequestDTO(
+                        specialTitle, specialDescription, null, null, null, null
+                );
+
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
+
+                // Act
+                ProductResponseDTO response = productService.updateProduct(productId, updateRequest);
+
+                // Assert
+                assertEquals(specialTitle.trim(), response.title());
+                assertEquals(specialDescription.trim(), response.description());
+            }
+
+            @Test
+            @DisplayName("Should handle a very long valid description (5000 characters) in update")
+            void shouldHandleVeryLongDescription_inUpdate() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                Product product = existingProduct(productId);
+                String longDescription = "X".repeat(5000);
+                ProductUpdateRequestDTO updateRequest = new ProductUpdateRequestDTO(
+                        null, longDescription, null, null, null, null
+                );
+
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
+
+                // Act
+                ProductResponseDTO response = productService.updateProduct(productId, updateRequest);
+
+                // Assert
+                assertNotNull(response);
+                assertEquals(5000, response.description().length());
+            }
+
+            @Test
+            @DisplayName("Should handle currency code trimming and uppercasing during update")
+            void shouldTrimAndUppercaseCurrencyCode_inUpdate() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                Product product = existingProduct(productId);
+                ProductUpdateRequestDTO updateRequest = new ProductUpdateRequestDTO(
+                        null, null, null, null, " gbp ", null
+                );
+
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
+
+                // Act
+                ProductResponseDTO response = productService.updateProduct(productId, updateRequest);
+
+                // Assert — DTO compact constructor trims and uppercases
+                assertEquals("GBP", response.currencyCode());
+            }
+
+            @Test
+            @DisplayName("Should handle title whitespace trimming during update")
+            void shouldTrimTitleWhitespace_inUpdate() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                Product product = existingProduct(productId);
+                ProductUpdateRequestDTO updateRequest = new ProductUpdateRequestDTO(
+                        "  Updated Title  ", null, null, null, null, null
+                );
+
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
+
+                // Act
+                ProductResponseDTO response = productService.updateProduct(productId, updateRequest);
+
+                // Assert — DTO compact constructor trims
+                assertEquals("Updated Title", response.title());
+            }
+
+            @Test
+            @DisplayName("Should successfully update an inactive (soft-deleted) product without reactivating it")
+            void shouldUpdateInactiveProduct_andKeepItInactive() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                Product inactiveProduct = inactiveProduct(productId); // Using your existing helper
+                ProductUpdateRequestDTO updateRequest = new ProductUpdateRequestDTO(
+                        "Updated Ghost Product", null, null, null, null, null
+                );
+
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(inactiveProduct));
+
+                // Act
+                ProductResponseDTO response = productService.updateProduct(productId, updateRequest);
+
+                // Assert
+                assertEquals("Updated Ghost Product", response.title());
+                assertFalse(inactiveProduct.isActive(), "Product should remain soft-deleted");
+            }
+        }
+
+        // ==================== MAPPER INTERACTION VERIFICATION ====================
+
+        @Nested
+        @DisplayName("Mapper integration verification")
+        class MapperVerification {
+
+            @Test
+            @DisplayName("Should correctly apply all non-null fields to the entity via the mapper")
+            void shouldApplyAllNonNullFieldsToEntity() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                Product product = existingProduct(productId);
+                ProductUpdateRequestDTO updateRequest = fullUpdateRequest();
+
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
+
+                // Act
+                productService.updateProduct(productId, updateRequest);
+
+                // Assert — verify entity was mutated correctly by the mapper
+                assertEquals(updateRequest.title(), product.getTitle());
+                assertEquals(updateRequest.description(), product.getDescription());
+                assertEquals(updateRequest.quantity(), product.getQuantity());
+                assertEquals(updateRequest.price(), product.getPrice());
+                assertEquals(updateRequest.currencyCode(), product.getCurrencyCode());
+                assertEquals(updateRequest.imageUrl(), product.getImageUrl());
+            }
+
+            @Test
+            @DisplayName("Should preserve all original entity values when all update fields are null")
+            void shouldPreserveOriginalValues_whenAllUpdateFieldsAreNull() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                Product product = existingProduct(productId);
+                ProductUpdateRequestDTO updateRequest = emptyUpdateRequest();
+
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
+
+                // Act
+                productService.updateProduct(productId, updateRequest);
+
+                // Assert — entity remains unchanged
+                assertEquals(VALID_TITLE, product.getTitle());
+                assertEquals(VALID_DESCRIPTION, product.getDescription());
+                assertEquals(VALID_QUANTITY, product.getQuantity());
+                assertEquals(VALID_PRICE, product.getPrice());
+                assertEquals(VALID_CURRENCY, product.getCurrencyCode());
+                assertEquals(VALID_IMAGE_URL, product.getImageUrl());
+            }
+
+            @Test
+            @DisplayName("Should only modify the title on the entity when only title is provided")
+            void shouldOnlyModifyTitleOnEntity_whenOnlyTitleIsProvided() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                Product product = existingProduct(productId);
+                ProductUpdateRequestDTO updateRequest = new ProductUpdateRequestDTO(
+                        "New Title Only", null, null, null, null, null
+                );
+
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
+
+                // Act
+                productService.updateProduct(productId, updateRequest);
+
+                // Assert — only title changed, all other fields remain original
+                assertEquals("New Title Only", product.getTitle());
+                assertEquals(VALID_DESCRIPTION, product.getDescription());
+                assertEquals(VALID_QUANTITY, product.getQuantity());
+                assertEquals(VALID_PRICE, product.getPrice());
+                assertEquals(VALID_CURRENCY, product.getCurrencyCode());
+                assertEquals(VALID_IMAGE_URL, product.getImageUrl());
+            }
+
+            @Test
+            @DisplayName("Should not change isActive status when updating a product")
+            void shouldNotChangeIsActiveStatus_whenUpdatingProduct() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                Product product = existingProduct(productId);
+                ProductUpdateRequestDTO updateRequest = fullUpdateRequest();
+
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
+
+                // Act
+                productService.updateProduct(productId, updateRequest);
+
+                // Assert — isActive should remain true (update doesn't touch it)
+                assertTrue(product.isActive());
+            }
+        }
+
+        // ==================== REPOSITORY INTERACTION VERIFICATION ====================
+
+        @Nested
+        @DisplayName("Repository interaction verification")
+        class RepositoryInteractionVerification {
+
+            @Test
+            @DisplayName("Should not call productRepository.save() — relies on Hibernate dirty-checking")
+            void shouldNotCallSave_reliesOnDirtyChecking() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                Product product = existingProduct(productId);
+
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
+
+                // Act
+                productService.updateProduct(productId, fullUpdateRequest());
+
+                // Assert — no explicit save, Hibernate dirty-checking handles persistence
+                verify(productRepository, never()).save(any(Product.class));
+            }
+
+            @Test
+            @DisplayName("Should not call any other productRepository methods besides findById")
+            void shouldNotCallOtherProductRepositoryMethods() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                Product product = existingProduct(productId);
+
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
+
+                // Act
+                productService.updateProduct(productId, fullUpdateRequest());
+
+                // Assert
+                verify(productRepository).findById(productId);
+                verifyNoMoreInteractions(productRepository);
+            }
+
+            @Test
+            @DisplayName("Should not interact with categoryRepository when updating a product")
+            void shouldNotInteractWithCategoryRepository() {
+                // Arrange
+                UUID productId = UUID.randomUUID();
+                Product product = existingProduct(productId);
+
+                when(productRepository.findById(productId))
+                        .thenReturn(Optional.of(product));
+
+                // Act
+                productService.updateProduct(productId, fullUpdateRequest());
 
                 // Assert
                 verifyNoInteractions(categoryRepository);
