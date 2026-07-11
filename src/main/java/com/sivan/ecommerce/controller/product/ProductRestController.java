@@ -3,6 +3,7 @@ package com.sivan.ecommerce.controller.product;
 import com.sivan.ecommerce.dto.product.ProductFilterDTO;
 import com.sivan.ecommerce.dto.product.ProductRequestDTO;
 import com.sivan.ecommerce.dto.product.ProductResponseDTO;
+import com.sivan.ecommerce.dto.product.ProductUpdateRequestDTO;
 import com.sivan.ecommerce.service.product.ProductService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -54,5 +55,12 @@ public class ProductRestController {
         productService.deleteProduct(productId);
 
         return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/{productId}")
+    public ResponseEntity<ProductResponseDTO> updateProduct(@PathVariable UUID productId,
+                                                            @RequestBody @Valid ProductUpdateRequestDTO productUpdateRequestDTO) {
+        
+        return ResponseEntity.ok(productService.updateProduct(productId, productUpdateRequestDTO));
     }
 }

@@ -42,6 +42,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/categories").permitAll()
                         .requestMatchers(HttpMethod.PUT, "/products/{productId}/categories/{categoryId}").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/products/{productId}").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/products/{productId}").hasRole("ADMIN")
                         .anyRequest().authenticated());
 
         // We need to tell Spring Security that we are using basic authentication
