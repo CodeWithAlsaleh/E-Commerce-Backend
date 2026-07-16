@@ -48,9 +48,18 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
 
+        /*
+         *  We explicitly do NOT specify the HttpMethod for the public auth endpoints.
+         *  This forces Spring Security to pass ALL requests for these URLs to Spring MVC.
+         *  If a client sends a GET request to /auth/login, Spring MVC will correctly
+         *  catch it and return a 405 Method Not Allowed.
+         *  If we restricted this to HttpMethod.POST, Spring Security would block
+         *  GET requests with a confusing 401 Unauthorized before it ever reached Spring MVC.
+         */
+        
         http.authorizeHttpRequests(config ->
                 config
-                        .requestMatchers(HttpMethod.POST, "/auth/login", "/auth/refresh").permitAll()
+                        .requestMatchers("/auth/login", "/auth/refresh").permitAll()
                         .requestMatchers(HttpMethod.POST, "/products").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/customers").permitAll()
                         .requestMatchers(HttpMethod.GET, "/customers/me").hasRole("USER")
