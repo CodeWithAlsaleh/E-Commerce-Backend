@@ -1,6 +1,7 @@
 package com.sivan.ecommerce.advice;
 
 import com.sivan.ecommerce.exception.InvalidDataException;
+import com.sivan.ecommerce.exception.InvalidTokenException;
 import com.sivan.ecommerce.exception.ResourceConflictException;
 import com.sivan.ecommerce.exception.ResourceNotFoundException;
 import com.sivan.ecommerce.response.ErrorResponse;
@@ -112,6 +113,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ResourceConflictException.class)
     public ResponseEntity<ErrorResponse> handleException(ResourceConflictException exception) {
         return buildError(HttpStatus.CONFLICT, exception.getMessage());
+    }
+
+    @ExceptionHandler(InvalidTokenException.class)
+    public ResponseEntity<ErrorResponse> handleException(InvalidTokenException exception) {
+        return buildError(HttpStatus.UNAUTHORIZED, exception.getMessage());
     }
 
     private ResponseEntity<ErrorResponse> buildError(HttpStatus httpStatus, String message) {
