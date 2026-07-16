@@ -30,4 +30,10 @@ public class AuthRestController {
     public ResponseEntity<AuthResponseDTO> refresh(@RequestBody @Valid RefreshRequestDTO refreshRequestDTO) {
         return ResponseEntity.ok(authService.refresh(refreshRequestDTO));
     }
+
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logout(@RequestBody @Valid RefreshRequestDTO refreshRequestDTO) {
+        authService.logout(refreshRequestDTO);
+        return ResponseEntity.noContent().build();
+    }
 }

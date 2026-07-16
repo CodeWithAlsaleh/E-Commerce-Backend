@@ -120,6 +120,30 @@ public class AuthServiceImpl implements AuthService {
         return new AuthResponseDTO(newAccessToken, newRefreshToken);
     }
 
+    /*
+     *  Logout flow:
+     *  1. Look up the refresh token in the database.
+     *  2. If found, delete it so it can never be used to generate new access tokens.
+     *  3. If not found, silently succeed (the token is already gone, the goal is achieved).
+     *
+     *  Note: The access token remains valid until it naturally expires (stateless).
+     *        The frontend is responsible for discarding it from local storage.
+     *
+     *  We don't clear the SecurityContext cuz it's "stateless", meaning that
+     *  the context will be clread after each request.
+     *
+     *  We don't need to update the SecurityConfig file, cuz we have at the end
+     *  of the configuration for endpoints ".anyRequest().authenticated()", So
+     *  the endpoint will be authenticated by default.
+     *  "U need to be logged in in order to log out"
+     */
+    @Override
+    @Transactional
+    public void logout(RefreshRequestDTO refreshRequestDTO) {
+        refreshTokenRepository.findByToken(refreshRequestDTO.refreshToken())
+                .ifPresent(refreshTokenRepository::delete);
+    }
+
     private String createRefreshToken(Customer customer) {
         /*
          *   There are generally two ways to handle Refresh Token Expiration:

@@ -9,4 +9,6 @@ public interface AuthService {
     AuthResponseDTO login(AuthRequestDTO authRequestDTO);
 
     AuthResponseDTO refresh(RefreshRequestDTO refreshRequestDTO);
+
+    void logout(RefreshRequestDTO refreshRequestDTO);
 }
