@@ -11,6 +11,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingPathVariableException;
@@ -96,6 +97,12 @@ public class GlobalExceptionHandler {
                         errorMessage,
                         System.currentTimeMillis()
                 ));
+    }
+
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<ErrorResponse> handleException(AuthenticationException exception) {
+        // We use a generic message to prevent "username enumeration" attacks
+        return buildError(HttpStatus.UNAUTHORIZED, "Invalid email or password");
     }
 
     // ==================== Custom exceptions ====================
