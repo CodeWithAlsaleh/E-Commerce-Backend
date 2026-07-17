@@ -1,8 +1,8 @@
 package com.sivan.ecommerce.controller.customer;
 
+import com.sivan.ecommerce.config.TestSecurityConfig;
 import org.springframework.security.test.context.support.WithMockUser;
 import tools.jackson.databind.ObjectMapper;
-import com.sivan.ecommerce.config.SecurityConfig;
 import com.sivan.ecommerce.dto.customer.CustomerRequestDTO;
 import com.sivan.ecommerce.dto.customer.CustomerResponseDTO;
 import com.sivan.ecommerce.exception.CustomerAlreadyExistsException;
@@ -40,7 +40,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * handling, service exceptions, malformed input, and edge cases.</p>
  */
 @WebMvcTest(CustomerRestController.class)
-@Import(SecurityConfig.class)
+@Import(TestSecurityConfig.class)
 @DisplayName("CustomerRestController")
 class CustomerRestControllerTest {
 

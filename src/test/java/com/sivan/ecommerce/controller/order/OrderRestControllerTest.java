@@ -1,6 +1,6 @@
 package com.sivan.ecommerce.controller.order;
 
-import com.sivan.ecommerce.config.SecurityConfig;
+import com.sivan.ecommerce.config.TestSecurityConfig;
 import com.sivan.ecommerce.dto.order.OrderFilterDTO;
 import com.sivan.ecommerce.dto.order.OrderItemResponseDTO;
 import com.sivan.ecommerce.dto.order.OrderRequestDTO;
@@ -60,7 +60,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * so header-level validation tests are included.</p>
  */
 @WebMvcTest(OrderRestController.class)
-@Import(SecurityConfig.class)
+@Import(TestSecurityConfig.class)
 @DisplayName("OrderRestController")
 class OrderRestControllerTest {
 

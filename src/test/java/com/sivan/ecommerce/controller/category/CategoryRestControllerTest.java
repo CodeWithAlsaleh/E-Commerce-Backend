@@ -1,7 +1,7 @@
 package com.sivan.ecommerce.controller.category;
 
+import com.sivan.ecommerce.config.TestSecurityConfig;
 import tools.jackson.databind.ObjectMapper;
-import com.sivan.ecommerce.config.SecurityConfig;
 import com.sivan.ecommerce.dto.category.CategoryRequestDTO;
 import com.sivan.ecommerce.dto.category.CategoryResponseDTO;
 import com.sivan.ecommerce.exception.CategoryAlreadyExistsException;
@@ -31,7 +31,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(CategoryRestController.class)
-@Import(SecurityConfig.class)
+@Import(TestSecurityConfig.class)
 @DisplayName("CategoryRestController")
 class CategoryRestControllerTest {
 

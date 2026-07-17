@@ -1,7 +1,7 @@
 package com.sivan.ecommerce.controller.product;
 
+import com.sivan.ecommerce.config.TestSecurityConfig;
 import tools.jackson.databind.ObjectMapper;
-import com.sivan.ecommerce.config.SecurityConfig;
 import com.sivan.ecommerce.dto.product.ProductFilterDTO;
 import com.sivan.ecommerce.dto.product.ProductRequestDTO;
 import com.sivan.ecommerce.dto.product.ProductResponseDTO;
@@ -42,7 +42,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(ProductRestController.class)
-@Import(SecurityConfig.class)
+@Import(TestSecurityConfig.class)
 @DisplayName("ProductRestController")
 class ProductRestControllerTest {
 

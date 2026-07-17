@@ -1,9 +1,9 @@
 package com.sivan.ecommerce.controller.cart;
 
+import com.sivan.ecommerce.config.TestSecurityConfig;
 import com.sivan.ecommerce.dto.cart.CartItemUpdateDTO;
 import com.sivan.ecommerce.exception.CartItemNotFoundException;
 import tools.jackson.databind.ObjectMapper;
-import com.sivan.ecommerce.config.SecurityConfig;
 import com.sivan.ecommerce.dto.cart.CartItemRequestDTO;
 import com.sivan.ecommerce.dto.cart.CartItemResponseDTO;
 import com.sivan.ecommerce.exception.CustomerNotFoundException;
@@ -46,7 +46,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * so authentication and authorization tests are included for both endpoints.</p>
  */
 @WebMvcTest(CartRestController.class)
-@Import(SecurityConfig.class)
+@Import(TestSecurityConfig.class)
 @DisplayName("CartRestController")
 class CartRestControllerTest {
 
